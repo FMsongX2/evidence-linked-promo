@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, PenLine, Wand2 } from "lucide-react";
+import { Check, FileText, ImageIcon, PenLine, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,7 +10,8 @@ import { cn } from "@/lib/utils";
 import { CardNews } from "./cardnews";
 import { EvidenceChips, WarningTags } from "./evidence";
 import { formatMs } from "./model";
-import { MetaLine, Running, SectionHeader, type W } from "./workbench";
+import { EmptyState, LINE_TAB, LINE_TABS, MetaLine, Pill, Running, StepHeader, StepPager } from "./step-frame";
+import type { W } from "./workbench";
 
 export function SentenceLine({ w, k, s, warnings, editable }: { w: W; k: string; s: Sentence; warnings: Warning[]; editable: boolean }) {
   const [editing, setEditing] = useState(false);
@@ -36,7 +37,7 @@ export function SentenceLine({ w, k, s, warnings, editable }: { w: W; k: string;
       </span>
     );
   return (
-    <span className={cn("group rounded px-0.5", warnings.length > 0 && "bg-red-50 underline decoration-red-500 decoration-wavy decoration-1 underline-offset-4")}>
+    <span className={cn("group rounded px-0.5", warnings.length > 0 && "bg-danger-soft underline decoration-danger decoration-wavy decoration-1 underline-offset-4")}>
       {s.text}
       <EvidenceChips s={s} cards={w.cards} docs={w.docs} photos={w.photos} readings={w.readings} />
       <WarningTags warnings={warnings} />
@@ -47,12 +48,40 @@ export function SentenceLine({ w, k, s, warnings, editable }: { w: W; k: string;
             setText(s.text);
             setEditing(true);
           }}
-          className="ml-1 inline-flex align-middle text-slate-400 opacity-0 hover:text-slate-900 group-hover:opacity-100"
+          className="ml-1 inline-flex align-middle text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-foreground focus-visible:opacity-100 pointer-coarse:opacity-100"
         >
           <PenLine className="size-4" />
         </button>
       )}{" "}
     </span>
+  );
+}
+
+/** 근거 칩 범례. 색과 함께 아이콘과 글자로 구분한다. */
+function ChipLegend() {
+  return (
+    <p className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
+      <span className="flex items-center gap-1.5">
+        <Pill tone="doc">
+          <FileText aria-hidden className="size-3" /> 문서
+        </Pill>
+        문서 근거
+      </span>
+      <span className="flex items-center gap-1.5">
+        <Pill tone="photo">
+          <ImageIcon aria-hidden className="size-3" /> 사진
+        </Pill>
+        사진 근거
+      </span>
+      <span className="flex items-center gap-1.5">
+        <Pill>근거 없음</Pill>
+        사실 문장에 근거가 없음
+      </span>
+      <span className="flex items-center gap-1.5">
+        <Pill tone="danger">경고</Pill>
+        4단계 점검에서 걸린 문장(물결 밑줄)
+      </span>
+    </p>
   );
 }
 
@@ -62,42 +91,49 @@ export function StepContent({ w }: { w: W }) {
   const ws = (k: string) => w.warningsByKey.get(k) ?? [];
   const editable = w.live && !w.approved;
   return (
-    <section id="step-3" className="scroll-mt-32 rounded-2xl border bg-white p-6">
-      <SectionHeader
-        n={3}
+    <section id="step-3" className="space-y-6">
+      <StepHeader
         title="콘텐츠 생성 — 문장마다 근거 칩"
-        desc="체크한 카드와 판독한 사진으로 블로그 리뷰형 초안(가이드라인 추천 구성 5단), 인스타그램 카드뉴스 5장, 설치 사례 글을 만듭니다. 파란 칩은 문서 근거, 노란 칩은 사진 근거입니다."
-      >
-        <MetaLine metas={w.metas} task="콘텐츠 생성" />
-        {w.photoToDraftMs !== null && <span className="rounded-md bg-slate-900 px-2 py-1 text-sm font-semibold text-white">사진 업로드 → 초안 {formatMs(w.photoToDraftMs)}</span>}
-        <Button data-testid="generate-run" size="lg" onClick={w.generate} disabled={Boolean(blockReason) || w.jobs.generate.running}>
-          <Wand2 /> 초안 만들기
-        </Button>
-      </SectionHeader>
-      {blockReason && w.live && <p className="-mt-2 mb-3 text-right text-sm text-muted-foreground">{blockReason}</p>}
+        desc="체크한 카드와 판독한 사진으로 블로그 리뷰형 초안(가이드라인 추천 구성 5단), 인스타그램 카드뉴스 5장, 설치 사례 글을 만듭니다. 파란 칩은 문서 근거, 주황 칩은 사진 근거입니다."
+        meta={
+          <>
+            <MetaLine metas={w.metas} task="콘텐츠 생성" />
+            {w.photoToDraftMs !== null && <Pill>사진 업로드 → 초안 {formatMs(w.photoToDraftMs)}</Pill>}
+          </>
+        }
+        actions={
+          <Button data-testid="generate-run" size="lg" variant={g ? "outline" : "default"} onClick={w.generate} disabled={Boolean(blockReason) || w.jobs.generate.running}>
+            <Wand2 /> 초안 만들기
+          </Button>
+        }
+        blockReason={w.live ? blockReason : null}
+      />
       <Running job={w.jobs.generate} label={`콘텐츠 생성(카드 ${w.selected.length}장, 사진 ${w.readings.length}장)`} />
-      {!g && !w.jobs.generate.running && <p className="rounded-lg border border-dashed p-6 text-center text-muted-foreground">아직 초안이 없습니다.</p>}
+      {!g && !w.jobs.generate.running && <EmptyState>아직 초안이 없습니다. 1단계 카드를 체크하고 초안 만들기를 누르세요.</EmptyState>}
       {g && (
-        <Tabs defaultValue="blog" className="mt-2">
-          <TabsList className="h-11">
-            <TabsTrigger data-testid="tab-blog" value="blog" className="px-4 text-base">
+        <Tabs defaultValue="blog" className="gap-0">
+          <TabsList variant="line" className={LINE_TABS}>
+            <TabsTrigger data-testid="tab-blog" value="blog" className={LINE_TAB}>
               네이버 블로그 리뷰형 초안
             </TabsTrigger>
-            <TabsTrigger data-testid="tab-cardnews" value="cards" className="px-4 text-base">
+            <TabsTrigger data-testid="tab-cardnews" value="cards" className={LINE_TAB}>
               인스타그램 카드뉴스 5장
             </TabsTrigger>
-            <TabsTrigger data-testid="tab-case" value="case" className="px-4 text-base">
+            <TabsTrigger data-testid="tab-case" value="case" className={LINE_TAB}>
               설치 사례 짧은 글
             </TabsTrigger>
           </TabsList>
-          <TabsContent value="blog" className="mt-4">
-            <article className="max-w-[1100px] space-y-5 text-[1.08rem] leading-[1.9]">
-              <h3 className="text-2xl font-extrabold leading-snug">
+          <div className="mt-4">
+            <ChipLegend />
+          </div>
+          <TabsContent value="blog" className="mt-6 text-base">
+            <article className="max-w-[46rem] space-y-6 text-article">
+              <h3 className="text-2xl font-semibold">
                 <SentenceLine w={w} k="blog.title" s={g.blog.title} warnings={ws("blog.title")} editable={editable} />
               </h3>
               {g.blog.sections.map((sec, i) => (
                 <div key={i}>
-                  <h4 className="mb-1 text-lg font-bold text-slate-700">
+                  <h4 className="mb-2 text-lg font-semibold">
                     {i + 1}. {sec.heading}
                   </h4>
                   <p>
@@ -107,47 +143,49 @@ export function StepContent({ w }: { w: W }) {
                   </p>
                 </div>
               ))}
-              <div className="rounded-lg bg-slate-50 p-3">
+              <div className="rounded-lg border bg-muted/50 p-4">
                 {g.blog.footer.map((s, j) => (
                   <p key={`${j}-${s.text}`}>
                     <SentenceLine w={w} k={`blog.footer.${j}`} s={s} warnings={ws(`blog.footer.${j}`)} editable={editable} />
                   </p>
                 ))}
               </div>
-              <p className="text-blue-700">{g.blog.hashtags.join(" ")}</p>
+              <p className="text-doc">{g.blog.hashtags.join(" ")}</p>
             </article>
           </TabsContent>
-          <TabsContent value="cards" className="mt-4 space-y-4">
+          <TabsContent value="cards" className="mt-6 space-y-6 text-base">
             <CardNews slides={g.cardnews} photos={w.photos} brand={w.brand} />
-            <div className="grid gap-2 text-[0.98rem] lg:grid-cols-2">
+            <ol className="grid gap-3 lg:grid-cols-2">
               {g.cardnews.map((c, i) => (
-                <div key={i} className="rounded-lg border p-3">
-                  <b className="mr-2">{i + 1}장</b>
-                  <SentenceLine w={w} k={`card.${i}.h`} s={c.headline} warnings={ws(`card.${i}.h`)} editable={editable} />
-                  <div className="mt-1 text-sm">
+                <li key={i} className="rounded-xl border p-4">
+                  <span className="mr-2 text-sm font-semibold text-muted-foreground">{i + 1}장</span>
+                  <span className="font-semibold">
+                    <SentenceLine w={w} k={`card.${i}.h`} s={c.headline} warnings={ws(`card.${i}.h`)} editable={editable} />
+                  </span>
+                  <div className="mt-2 text-sm">
                     {c.body.map((s, j) => (
                       <SentenceLine key={`${j}-${s.text}`} w={w} k={`card.${i}.b${j}`} s={s} warnings={ws(`card.${i}.b${j}`)} editable={editable} />
                     ))}
                   </div>
-                </div>
+                </li>
               ))}
-            </div>
+            </ol>
           </TabsContent>
-          <TabsContent value="case" className="mt-4">
-            <article className="max-w-[1100px] space-y-3 text-[1.08rem] leading-[1.9]">
-              <h3 className="text-xl font-extrabold">{g.caseStudy.title}</h3>
+          <TabsContent value="case" className="mt-6 text-base">
+            <article className="max-w-[46rem] space-y-4 text-article">
+              <h3 className="text-2xl font-semibold">{g.caseStudy.title}</h3>
               <p>
                 {g.caseStudy.sentences.map((s, j) => (
                   <SentenceLine key={`${j}-${s.text}`} w={w} k={`case.${j}`} s={s} warnings={ws(`case.${j}`)} editable={editable} />
                 ))}
               </p>
-              <div className="flex flex-wrap gap-3">
+              <div className="flex flex-wrap gap-4">
                 {w.photos
                   .filter((p) => g.caseStudy.sentences.some((s) => s.photoIds.includes(p.id)))
                   .map((p) => (
                     <figure key={p.id} className="w-56">
-                      {p.src ? <img src={p.src} alt={p.name} className="max-h-48 rounded border object-contain" /> : <div className="text-xs text-red-700">{p.loadError}</div>}
-                      <figcaption className="text-xs text-muted-foreground">
+                      {p.src ? <img src={p.src} alt={p.name} className="max-h-48 rounded-lg border object-contain" /> : <div className="text-xs text-danger">{p.loadError}</div>}
+                      <figcaption className="mt-1 text-xs text-muted-foreground">
                         {p.id} · 출처: {p.sourceLabel}
                       </figcaption>
                     </figure>
@@ -157,6 +195,8 @@ export function StepContent({ w }: { w: W }) {
           </TabsContent>
         </Tabs>
       )}
+
+      <StepPager prev={{ view: "step-2", label: "사진 판독" }} next={{ view: "step-4", label: "게시 전 점검" }} />
     </section>
   );
 }

@@ -13,12 +13,52 @@
   font-display: swap;
 }
 
+/* 글자 체계(한 가족, 6단계). 한글 본문은 줄 높이 1.6 이상, 자간 0. */
+@theme {
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1.125rem;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.375rem;
+  --text-base: 1rem;
+  --text-base--line-height: 1.625rem;
+  --text-article: 1.0625rem;
+  --text-article--line-height: 1.875rem;
+  --text-lg: 1.125rem;
+  --text-lg--line-height: 1.75rem;
+  --text-2xl: 1.5rem;
+  --text-2xl--line-height: 2rem;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: "Pretendard", -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
   --font-heading: "Pretendard", sans-serif;
+  /* 화면 틀과 상태 색 역할 */
+  --color-rail: var(--rail);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-success-border: var(--success-border);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-border: var(--warning-border);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-border: var(--danger-border);
+  --color-doc: var(--doc);
+  --color-doc-soft: var(--doc-soft);
+  --color-doc-border: var(--doc-border);
+  --color-photo: var(--photo);
+  --color-photo-soft: var(--photo-soft);
+  --color-photo-border: var(--photo-border);
+  --color-judge-model: var(--judge-model);
+  --color-judge-model-soft: var(--judge-model-soft);
+  --color-judge-code: var(--judge-code);
+  --color-judge-code-soft: var(--judge-code-soft);
+  --color-award: var(--award);
+  --color-award-soft: var(--award-soft);
+  --color-award-border: var(--award-border);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -58,38 +98,64 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --background: #ffffff;
+  --foreground: #1a1d23;
+  --card: #ffffff;
+  --card-foreground: #1a1d23;
+  --popover: #ffffff;
+  --popover-foreground: #1a1d23;
+  --primary: #1b2a4a;
+  --primary-foreground: #ffffff;
+  --secondary: #eef0f3;
+  --secondary-foreground: #1a1d23;
+  --muted: #f3f4f6;
+  /* 흰 바탕 6.3:1, 레일 바탕 5.8:1 */
+  --muted-foreground: #5b616e;
+  --accent: #eef0f3;
+  --accent-foreground: #1a1d23;
+  --destructive: #b42318;
+  --border: #e3e5e9;
+  --input: #c9cdd4;
+  --ring: #3b6fd8;
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar: #f5f6f8;
+  --sidebar-foreground: #1a1d23;
+  --sidebar-primary: #1b2a4a;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eef0f3;
+  --sidebar-accent-foreground: #1a1d23;
+  --sidebar-border: #e3e5e9;
+  --sidebar-ring: #3b6fd8;
+
+  --rail: #f5f6f8;
+  /* 상태 색: 글자색은 옅은 바탕 위에서 4.5:1 이상 */
+  --success: #1f6b43;
+  --success-soft: #ecf7f1;
+  --success-border: #bfe3cf;
+  --warning: #8a4b00;
+  --warning-soft: #fdf5e6;
+  --warning-border: #f0d29c;
+  --danger: #b42318;
+  --danger-soft: #fdeeee;
+  --danger-border: #f3c2c2;
+  --doc: #1d4fa8;
+  --doc-soft: #edf3fd;
+  --doc-border: #c3d6f7;
+  --photo: #9a4a0b;
+  --photo-soft: #fdf2e9;
+  --photo-border: #f2cfae;
+  --judge-model: #5b2fa6;
+  --judge-model-soft: #f3eefc;
+  --judge-code: #333a46;
+  --judge-code-soft: #eef0f3;
+  --award: #6b5414;
+  --award-soft: #fbf7e9;
+  --award-border: #e3d29a;
 }
 
 .dark {
@@ -135,8 +201,21 @@
   }
   html {
     @apply font-sans;
-    /* 1920×1080 화면 녹화에서 읽히도록 기본 글자 크기를 키운다. */
-    font-size: 17px;
+    font-size: 16px;
     word-break: keep-all;
+    overflow-wrap: break-word;
+    scrollbar-color: #c9cdd4 transparent;
+  }
+  ::selection {
+    background: #cfdcf6;
+    color: #1a1d23;
+  }
+  /* 키보드 초점은 모든 조작 요소에서 보이게 한다. */
+  :where(a, button, summary, [role="tab"], input, textarea, label):focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  summary {
+    cursor: pointer;
   }
 }

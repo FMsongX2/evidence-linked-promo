@@ -128,20 +128,24 @@ export function CardNews({ slides, photos, brand }: { slides: Generation["cardne
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-3">
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <Button data-testid="cardnews-download" onClick={() => run("all")} disabled={busy !== null}>
           <Download /> {busy === "all" ? "PNG 저장 중…" : "PNG 5장 내려받기"}
         </Button>
         <span className="text-sm text-muted-foreground">1080×1350 · Pretendard · 사진은 자르지 않고 원본 비율로 배치</span>
-        {error && <span className="text-sm font-semibold text-red-700">{error}</span>}
+        {error && (
+          <span role="alert" className="text-sm font-medium text-danger">
+            {error}
+          </span>
+        )}
       </div>
       <div className="flex flex-wrap gap-4">
         {slides.map((s, i) => {
           const photo = s.photoId ? (photos.find((p) => p.id === s.photoId) ?? null) : null;
           return (
-            <div key={i} className="space-y-1">
-              <div style={{ width: SLIDE_W * scale, height: SLIDE_H * scale, overflow: "hidden" }} className="rounded-lg shadow ring-1 ring-black/10">
+            <div key={i} className="space-y-2">
+              <div style={{ width: SLIDE_W * scale, height: SLIDE_H * scale, overflow: "hidden" }} className="rounded-lg shadow-sm ring-1 ring-foreground/10">
                 <div style={{ transform: `scale(${scale})`, transformOrigin: "top left", width: SLIDE_W, height: SLIDE_H }}>
                   <div ref={(el) => void (refs.current[i] = el)}>
                     <SlideView slide={s} index={i} total={slides.length} photo={photo} brand={brand} />

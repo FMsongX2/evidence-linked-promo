@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Eye, FolderOpen, Play, Save } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Award, Circle, CircleAlert, CircleCheck, Eye, FolderOpen, LoaderCircle, Play, Save } from "lucide-react";
+import { Button, buttonVariants } from "@/components/ui/button";
 import type { CheckItem } from "@/lib/check";
 import { resizeImage } from "@/lib/client-image";
 import type { Card, Conflict, Generation, Guideline, LlmMeta, PhotoReading, Sentence, SourceDoc, Warning } from "@/lib/schemas";
@@ -14,6 +14,7 @@ import { StepSources } from "./step-sources";
 import { StepPhotos } from "./step-photos";
 import { StepContent } from "./step-content";
 import { StepCheck } from "./step-check";
+import { NavContext, STEPS, StepHeader, VIEWS, useNav, type View } from "./step-frame";
 
 type Config = {
   providers: Providers;
@@ -761,14 +762,9 @@ export function useWorkbench() {
 
 export type W = ReturnType<typeof useWorkbench>;
 
-const STEPS = [
-  { id: "step-1", n: 1, title: "제품 분석" },
-  { id: "step-2", n: 2, title: "사진 판독" },
-  { id: "step-3", n: 3, title: "콘텐츠 생성" },
-  { id: "step-4", n: 4, title: "게시 전 점검" },
-] as const;
+type StepTone = "idle" | "run" | "done" | "error";
 
-function stepState(w: W, n: number): { label: string; tone: "idle" | "run" | "done" | "error" } {
+function stepState(w: W, n: number): { label: string; tone: StepTone } {
   const j = n === 1 ? w.jobs.cards : n === 2 ? w.jobs.photos : n === 3 ? w.jobs.generate : w.jobs.check;
   const done = n === 1 ? w.cards.length > 0 : n === 2 ? w.readings.length > 0 : n === 3 ? Boolean(w.generation) : Boolean(w.check);
   if (j.running) return { label: "진행 중", tone: "run" };
@@ -777,9 +773,54 @@ function stepState(w: W, n: number): { label: string; tone: "idle" | "run" | "do
   return { label: "대기", tone: "idle" };
 }
 
-export function Workbench() {
+/** 단계 상태 아이콘. 색과 모양이 함께 바뀌고, 글자 상태는 옆이나 화면 낭독용 글자로 함께 둔다. */
+function StepIcon({ tone, className }: { tone: StepTone; className?: string }) {
+  const cls = cn("size-4 shrink-0", className);
+  if (tone === "done") return <CircleCheck aria-hidden className={cn(cls, "text-success")} />;
+  if (tone === "run") return <LoaderCircle aria-hidden className={cn(cls, "text-doc motion-safe:animate-spin")} />;
+  if (tone === "error") return <CircleAlert aria-hidden className={cn(cls, "text-danger")} />;
+  return <Circle aria-hidden className={cn(cls, "text-muted-foreground")} />;
+}
+
+const AUTO_STAGE_VIEW: Record<AutoStage, View> = { cards: "step-1", photos: "step-2", generate: "step-3", check: "step-4", done: "step-4" };
+
+export function Workbench({ children }: { children?: React.ReactNode }) {
   const w = useWorkbench();
   const p = w.mode === "example" ? w.exampleProviders : w.config?.providers;
+  const [view, setView] = useState<View>("step-1");
+  const go = useCallback((v: View, opts?: { replace?: boolean }) => {
+    setView(v);
+    const url = `${window.location.pathname}${window.location.search}#${v}`;
+    if (opts?.replace) window.history.replaceState(null, "", url);
+    else if (window.location.hash !== `#${v}`) window.history.pushState(null, "", url);
+    window.scrollTo({ top: 0 });
+    document.getElementById("main")?.focus({ preventScroll: true });
+  }, []);
+  // 주소 해시로 화면을 고른다. 뒤로 가기와 기존 앵커 주소(#step-1 등)가 그대로 동작한다.
+  useEffect(() => {
+    const read = () => {
+      const h = window.location.hash.slice(1) as View;
+      if (VIEWS.includes(h)) setView(h);
+    };
+    read();
+    window.addEventListener("popstate", read);
+    window.addEventListener("hashchange", read);
+    return () => {
+      window.removeEventListener("popstate", read);
+      window.removeEventListener("hashchange", read);
+    };
+  }, []);
+  // 자동 실행 중에는 진행 중인 단계 화면을 따라가고, 끝나면 4단계를 연다(단계가 바뀔 때만 따라간다).
+  const autoView = w.auto && (w.auto.running || w.auto.stage === "done") ? AUTO_STAGE_VIEW[w.auto.stage] : null;
+  const autoKey = w.auto ? `${w.auto.stage}:${w.auto.running}` : null;
+  const [seenAuto, setSeenAuto] = useState<string | null>(null);
+  if (autoKey !== seenAuto) {
+    setSeenAuto(autoKey);
+    if (autoView) setView(autoView);
+  }
+  useEffect(() => {
+    if (autoView) window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#${autoView}`);
+  }, [autoKey, autoView]);
   // ?step=check: 자료와 가이드라인을 불러와 원고 검수 화면(17개 항목 목록)으로 바로 연다.
   const opened = useRef(false);
   const { config, loadTlink } = w;
@@ -787,102 +828,265 @@ export function Workbench() {
     if (opened.current || !config) return;
     if (new URLSearchParams(window.location.search).get("step") !== "check") return;
     opened.current = true;
-    const go = () => document.getElementById("paste-check")?.scrollIntoView({ block: "start" });
-    if (config.data.available) void loadTlink().then(() => setTimeout(go, 50));
-    else go();
-  }, [config, loadTlink]);
+    void (config.data.available ? loadTlink() : Promise.resolve()).then(() => go("paste-check", { replace: true }));
+  }, [config, loadTlink, go]);
+  const nav = useMemo(() => ({ view, go }), [view, go]);
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="sticky top-0 z-30 border-b bg-white/95 backdrop-blur">
-        <div className="mx-auto flex max-w-[1800px] items-center gap-6 px-6 py-3">
-          <div className="min-w-0 max-w-[24rem] shrink">
-            <h1 className="text-xl font-extrabold tracking-tight">근거 달린 홍보문</h1>
-            <p className="text-sm text-muted-foreground">사진과 제품 정보에서 게시 전 점검까지 끝난 초안을 자동으로 만듭니다. 사람은 확인하고 승인만 합니다.</p>
-          </div>
-          <nav className="flex flex-1 items-center justify-center gap-1.5">
-            {STEPS.map((s) => {
-              const st = stepState(w, s.n);
-              return (
-                <a
-                  key={s.id}
-                  href={`#${s.id}`}
-                  className={cn(
-                    "flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-sm font-semibold",
-                    st.tone === "done" && "border-emerald-300 bg-emerald-50 text-emerald-800",
-                    st.tone === "run" && "border-blue-300 bg-blue-50 text-blue-800",
-                    st.tone === "error" && "border-red-300 bg-red-50 text-red-800",
-                    st.tone === "idle" && "border-slate-200 text-slate-600",
-                  )}
-                >
-                  <span className="flex size-6 items-center justify-center rounded-full bg-white text-xs ring-1 ring-current">{s.n}</span>
-                  {s.title}
-                  <span className="text-xs font-medium opacity-80">{st.label}</span>
-                </a>
-              );
-            })}
-          </nav>
-          <div className="flex items-center gap-2">
-            <Button data-testid="load-tlink" variant="outline" onClick={w.loadTlink} disabled={w.jobs.load.running}>
-              <FolderOpen /> 티링크 자료 불러오기
-            </Button>
-            <Button data-testid="load-example" variant="outline" onClick={w.loadExample} disabled={w.jobs.load.running}>
-              <Eye /> 티링크 예시로 보기
-            </Button>
-            <Button
-              data-testid="auto-run"
-              onClick={w.autoRun}
-              disabled={Boolean(w.modelBlock) || w.docs.length === 0 || Boolean(w.auto?.running)}
-              title={w.modelBlock ?? (w.docs.length === 0 ? "자료를 먼저 불러오세요." : "카드 추출 → 사진 판독 → 초안 생성 → 게시 전 점검을 이어서 실행")}
-            >
-              <Play /> 자동 실행
-            </Button>
-            {w.auto && <AutoElapsed auto={w.auto} />}
-            {w.live && w.config && !w.config.deployed && w.check && (
-              <Button data-testid="save-example" variant="ghost" size="sm" onClick={w.saveExample} title="현재 실행 결과를 공개 데모용 예시 결과로 저장(로컬 전용)">
-                <Save /> 예시로 저장
-              </Button>
-            )}
-          </div>
+    <NavContext.Provider value={nav}>
+      <div className="min-h-dvh bg-background">
+        <a href="#main" className="sr-only z-50 rounded-md bg-background px-3 py-2 text-sm focus:not-sr-only focus:fixed focus:top-2 focus:left-2">
+          본문으로 건너뛰기
+        </a>
+        <TopBar w={w} />
+        <StatusStrip w={w} />
+        <MobileStepNav w={w} />
+        <div className="lg:grid lg:grid-cols-[15rem_minmax(0,1fr)]">
+          <StepRail w={w} p={p} />
+          <main id="main" tabIndex={-1} className="min-w-0 px-4 pt-6 pb-12 outline-none md:px-8 md:pt-8">
+            <div className="max-w-[75rem] 2xl:max-w-[100rem]">
+              <div hidden={view !== "step-1"}>
+                <StepSources w={w} />
+              </div>
+              <div hidden={view !== "step-2"}>
+                <StepPhotos w={w} />
+              </div>
+              <div hidden={view !== "step-3"}>
+                <StepContent w={w} />
+              </div>
+              <div hidden={view !== "step-4" && view !== "paste-check"}>
+                <StepCheck w={w} />
+              </div>
+              <div hidden={view !== "run-info"}>
+                <RunSummary w={w} p={p} />
+              </div>
+              {children}
+            </div>
+          </main>
         </div>
-        <div className="mx-auto flex max-w-[1800px] flex-wrap items-center gap-x-4 gap-y-1 px-6 pb-2 text-xs text-muted-foreground">
-          <span>글 작업 모델: {p?.main ?? `없음 — ${p?.mainReason ?? "설정 확인 중"}`}</span>
-          <span>사진 판독 모델: {p?.vision ?? `없음 — ${p?.visionReason ?? "설정 확인 중"}`}</span>
-          <span>
-            교차 판정 모델: {p?.judge ?? `없음 — ${p?.judgeReason ?? "설정 확인 중"}`}
-            {p?.judge && (p.judgeSameVendor ? " (같은 공급자의 별도 호출로 판정)" : " (생성과 다른 회사 모델)")}
-          </span>
-          {w.photoToDraftMs !== null && <span className="font-semibold text-slate-700">사진 업로드 → 초안: {formatMs(w.photoToDraftMs)}</span>}
-          {w.jobs.load.error && <span className="font-semibold text-red-700">{w.jobs.load.error}</span>}
-          {w.auto && (
-            <span className={cn("font-semibold", w.auto.error ? "text-red-700" : "text-blue-800")}>
-              자동 실행: {w.auto.error ? `중단 — ${w.auto.error}` : w.auto.running ? `${AUTO_STAGE_LABEL[w.auto.stage]} 진행 중` : `점검 끝난 초안까지 ${formatMs(w.auto.totalMs ?? 0)}, 사람이 누른 횟수 ${w.auto.actionsDuring ?? 1}회`}
-              {Object.entries(w.auto.steps).map(([k, ms]) => ` · ${AUTO_STAGE_LABEL[k as AutoStage]} ${formatMs(ms)}`)}
-            </span>
-          )}
-        </div>
-        {w.mode === "example" && (
-          <div data-testid="example-banner" className="border-t bg-amber-50 px-6 py-2 text-center text-sm font-semibold text-amber-900">
-            미리 계산한 예시 결과입니다({w.exampleSavedAt ? new Date(w.exampleSavedAt).toLocaleString("ko-KR") : ""} 실제 실행 출력). 원본 문서 전문은 포함하지 않았습니다. 이 예시는 저장해 둔 실행의 결과입니다.{" "}
-            <button className="underline" onClick={w.startLive}>
-              처음부터 직접 실행
-            </button>
-          </div>
-        )}
-      </header>
-      <main className="mx-auto max-w-[1800px] space-y-8 px-6 py-6">
-        <StepSources w={w} />
-        <StepPhotos w={w} />
-        <StepContent w={w} />
-        <StepCheck w={w} />
-        <RunSummary w={w} />
-      </main>
-    </div>
+      </div>
+    </NavContext.Provider>
   );
 }
 
-/** 실행 요약: 실제 호출한 모델 식별자, 호출 수·토큰, 자료 처리 안내, 카드 보드 내보내기. */
-function RunSummary({ w }: { w: W }) {
+export function AwardBadge({ className }: { className?: string }) {
+  return (
+    <span data-testid="award-badge" className={cn("inline-flex items-center gap-1.5 rounded-full border border-award-border bg-award-soft px-2.5 py-0.5 text-xs font-medium text-award", className)}>
+      <Award aria-hidden className="size-3.5" />
+      2026 제5차 AI 스마트워크톤 트랙 A 대상
+    </span>
+  );
+}
+
+/** 머리글: 제품 이름, 대상 배지, 전역 행동. 1024px 이상에서만 고정한다. */
+function TopBar({ w }: { w: W }) {
+  const { go } = useNav();
+  return (
+    <header className="border-b bg-background lg:sticky lg:top-0 lg:z-30">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 md:px-6 lg:h-14 lg:flex-nowrap lg:py-0">
+        <h1 className="text-base font-bold whitespace-nowrap">
+          <a
+            href="#step-1"
+            className="rounded"
+            onClick={(e) => {
+              e.preventDefault();
+              go("step-1");
+            }}
+          >
+            근거 달린 홍보문
+          </a>
+        </h1>
+        <AwardBadge />
+        <div className="flex w-full flex-wrap items-center gap-2 lg:ml-auto lg:w-auto lg:flex-nowrap">
+          <Button data-testid="load-tlink" variant="outline" onClick={w.loadTlink} disabled={w.jobs.load.running}>
+            <FolderOpen /> 티링크 자료 불러오기
+          </Button>
+          <Button
+            data-testid="load-example"
+            variant="outline"
+            onClick={async () => {
+              await w.loadExample();
+              go("step-1");
+            }}
+            disabled={w.jobs.load.running}
+          >
+            <Eye /> 티링크 예시로 보기
+          </Button>
+          <Button
+            data-testid="auto-run"
+            variant={w.cards.length === 0 ? "default" : "outline"}
+            onClick={w.autoRun}
+            disabled={Boolean(w.modelBlock) || w.docs.length === 0 || Boolean(w.auto?.running)}
+            title={w.modelBlock ?? (w.docs.length === 0 ? "자료를 먼저 불러오세요." : "카드 추출 → 사진 판독 → 초안 생성 → 게시 전 점검을 이어서 실행")}
+          >
+            <Play /> 자동 실행
+          </Button>
+          {w.auto && <AutoElapsed auto={w.auto} />}
+          {w.live && w.config && !w.config.deployed && w.check && (
+            <Button data-testid="save-example" variant="ghost" onClick={w.saveExample} title="현재 실행 결과를 공개 데모용 예시 결과로 저장(로컬 전용)">
+              <Save /> 예시로 저장
+            </Button>
+          )}
+        </div>
+      </div>
+    </header>
+  );
+}
+
+/** 머리글 아래 상태 띠: 예시 보기 안내, 자동 실행 진행, 불러오기 오류. 있을 때만 보인다. */
+function StatusStrip({ w }: { w: W }) {
+  const { go } = useNav();
+  const strip = "border-b px-4 py-2 text-sm md:px-6";
+  return (
+    <>
+      {w.mode === "example" && (
+        <div data-testid="example-banner" className={cn(strip, "border-warning-border bg-warning-soft text-warning")}>
+          미리 계산한 예시 결과입니다({w.exampleSavedAt ? new Date(w.exampleSavedAt).toLocaleString("ko-KR") : ""} 실제 실행 출력). 원본 문서 전문은 포함하지 않았습니다. 이 예시는 저장해 둔 실행의 결과입니다.{" "}
+          <button
+            className="font-semibold underline underline-offset-2"
+            onClick={() => {
+              w.startLive();
+              go("step-1");
+            }}
+          >
+            처음부터 직접 실행
+          </button>
+        </div>
+      )}
+      {w.auto && (
+        <div role="status" className={cn(strip, w.auto.error ? "border-danger-border bg-danger-soft text-danger" : "border-doc-border bg-doc-soft text-doc")}>
+          <span className="font-semibold">
+            자동 실행: {w.auto.error ? `중단 — ${w.auto.error}` : w.auto.running ? `${AUTO_STAGE_LABEL[w.auto.stage]} 진행 중` : `점검 끝난 초안까지 ${formatMs(w.auto.totalMs ?? 0)}, 사람이 누른 횟수 ${w.auto.actionsDuring ?? 1}회`}
+          </span>
+          {Object.entries(w.auto.steps).map(([k, ms]) => ` · ${AUTO_STAGE_LABEL[k as AutoStage]} ${formatMs(ms)}`)}
+        </div>
+      )}
+      {w.jobs.load.error && (
+        <div role="alert" className={cn(strip, "border-danger-border bg-danger-soft font-semibold text-danger")}>
+          {w.jobs.load.error}
+        </div>
+      )}
+    </>
+  );
+}
+
+function railHref(v: View, go: (v: View) => void) {
+  return {
+    href: `#${v}`,
+    onClick: (e: React.MouseEvent) => {
+      e.preventDefault();
+      go(v);
+    },
+  };
+}
+
+/** 1024px 이상: 왼쪽 레일. 단계, 외부 원고 검수, 실행 정보, 사용 모델. */
+function StepRail({ w, p }: { w: W; p: Providers | null | undefined }) {
+  const { view, go } = useNav();
+  const item = "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm hover:bg-background/70 aria-[current=page]:bg-background aria-[current=page]:font-semibold aria-[current=page]:shadow-xs";
+  return (
+    <aside className="hidden border-r bg-rail px-3 py-4 lg:sticky lg:top-14 lg:flex lg:h-[calc(100dvh-3.5rem)] lg:flex-col lg:overflow-y-auto">
+      <nav aria-label="작업 단계">
+        <ol className="space-y-0.5">
+          {STEPS.map((s) => {
+            const st = stepState(w, s.n);
+            return (
+              <li key={s.view}>
+                <a {...railHref(s.view, go)} aria-current={view === s.view ? "page" : undefined} className={item}>
+                  <span aria-hidden className="flex size-6 shrink-0 items-center justify-center rounded-full border border-input bg-background text-xs font-medium">
+                    {s.n}
+                  </span>
+                  <span className="flex-1">{s.title}</span>
+                  <span className="flex items-center gap-1 text-xs font-normal text-muted-foreground">
+                    <StepIcon tone={st.tone} className="size-3.5" />
+                    {st.label}
+                  </span>
+                </a>
+                {s.n === 4 && (
+                  <a {...railHref("paste-check", go)} aria-current={view === "paste-check" ? "page" : undefined} className={cn(item, "py-1.5 pl-11 text-muted-foreground aria-[current=page]:text-foreground")}>
+                    외부 리뷰 원고 검수
+                  </a>
+                )}
+              </li>
+            );
+          })}
+        </ol>
+        <div className="my-3 border-t" />
+        <a {...railHref("run-info", go)} aria-current={view === "run-info" ? "page" : undefined} className={item}>
+          실행 정보
+        </a>
+      </nav>
+      <ProviderList p={p} className="mt-auto pt-6" />
+    </aside>
+  );
+}
+
+function ProviderList({ p, className }: { p: Providers | null | undefined; className?: string }) {
+  return (
+    <dl className={cn("space-y-2 text-xs text-muted-foreground", className)}>
+      <div>
+        <dt className="font-medium text-foreground">글 작업 모델</dt>
+        <dd className="break-all">{p?.main ?? `없음 — ${p?.mainReason ?? "설정 확인 중"}`}</dd>
+      </div>
+      <div>
+        <dt className="font-medium text-foreground">사진 판독 모델</dt>
+        <dd className="break-all">{p?.vision ?? `없음 — ${p?.visionReason ?? "설정 확인 중"}`}</dd>
+      </div>
+      <div>
+        <dt className="font-medium text-foreground">교차 판정 모델</dt>
+        <dd className="break-all">
+          {p?.judge ?? `없음 — ${p?.judgeReason ?? "설정 확인 중"}`}
+          {p?.judge && (p.judgeSameVendor ? " (같은 공급자의 별도 호출로 판정)" : " (생성과 다른 회사 모델)")}
+        </dd>
+      </div>
+    </dl>
+  );
+}
+
+/** 1024px 미만: 고정되는 4칸 단계 표시줄과, 그 아래 외부 원고 검수·실행 정보 링크. */
+function MobileStepNav({ w }: { w: W }) {
+  const { view, go } = useNav();
+  return (
+    <>
+      <nav aria-label="작업 단계" className="sticky top-0 z-30 border-b bg-rail lg:hidden">
+        <ol className="grid grid-cols-4">
+          {STEPS.map((s) => {
+            const st = stepState(w, s.n);
+            const on = view === s.view || (s.n === 4 && view === "paste-check");
+            return (
+              <li key={s.view}>
+                <a
+                  {...railHref(s.view, go)}
+                  aria-current={on ? "page" : undefined}
+                  className="flex min-h-14 flex-col items-center justify-center gap-0.5 border-b-2 border-transparent px-1 py-1.5 text-center text-xs text-muted-foreground aria-[current=page]:border-primary aria-[current=page]:bg-background aria-[current=page]:font-semibold aria-[current=page]:text-foreground"
+                >
+                  <span className="flex items-center gap-1">
+                    {s.n}
+                    <StepIcon tone={st.tone} className="size-3.5" />
+                  </span>
+                  <span>{s.short}</span>
+                  <span className="sr-only">{st.label}</span>
+                </a>
+              </li>
+            );
+          })}
+        </ol>
+      </nav>
+      <div className="flex gap-4 border-b px-4 py-2 text-sm lg:hidden">
+        <a {...railHref("paste-check", go)} aria-current={view === "paste-check" ? "page" : undefined} className="text-muted-foreground underline-offset-2 hover:underline aria-[current=page]:font-semibold aria-[current=page]:text-foreground">
+          외부 리뷰 원고 검수
+        </a>
+        <a {...railHref("run-info", go)} aria-current={view === "run-info" ? "page" : undefined} className="text-muted-foreground underline-offset-2 hover:underline aria-[current=page]:font-semibold aria-[current=page]:text-foreground">
+          실행 정보
+        </a>
+      </div>
+    </>
+  );
+}
+
+/** 실행 정보: 사용 모델, 실제로 호출한 모델·호출 수·토큰, 자료 처리 안내, 카드 보드 내보내기. */
+function RunSummary({ w, p }: { w: W; p: Providers | null | undefined }) {
   const { refreshLocalFiles, config } = w;
+  const { go } = useNav();
   useEffect(() => {
     if (config && !config.deployed) void refreshLocalFiles();
     // 설정을 받은 뒤 한 번 읽는다.
@@ -903,17 +1107,38 @@ function RunSummary({ w }: { w: W }) {
     { input: 0, output: 0, known: 0 },
   );
   const deployed = config?.deployed;
+  const h3 = "text-lg font-semibold";
+  const block = "border-t pt-6";
   return (
-    <section data-testid="run-summary" className="grid gap-4 rounded-2xl border bg-white p-6 text-[0.95rem] lg:grid-cols-3">
-      <div>
-        <h2 className="mb-2 text-lg font-bold">실제로 호출한 모델</h2>
+    <section id="run-info" data-testid="run-summary" className="space-y-8">
+      <StepHeader title="실행 정보" desc="이 실행에 쓴 모델과 걸린 시간, 올린 자료를 처리하는 방식, 외부 작성자에게 보내는 카드 보드 파일을 다룹니다." />
+      <div className="grid gap-6 md:grid-cols-2">
+        <div>
+          <h3 className={h3}>사용 모델</h3>
+          <ProviderList p={p} className="mt-3 text-sm" />
+        </div>
+        <div>
+          <h3 className={h3}>걸린 시간</h3>
+          <ul className="mt-3 space-y-1 text-sm">
+            <li>사진 업로드 → 초안: {w.photoToDraftMs !== null ? formatMs(w.photoToDraftMs) : "측정 전"}</li>
+            {w.auto && (
+              <li>
+                자동 실행: {w.auto.error ? `중단 — ${w.auto.error}` : w.auto.running ? `${AUTO_STAGE_LABEL[w.auto.stage]} 진행 중` : `점검 끝난 초안까지 ${formatMs(w.auto.totalMs ?? 0)}, 사람이 누른 횟수 ${w.auto.actionsDuring ?? 1}회`}
+                {Object.entries(w.auto.steps).map(([k, ms]) => ` · ${AUTO_STAGE_LABEL[k as AutoStage]} ${formatMs(ms)}`)}
+              </li>
+            )}
+          </ul>
+        </div>
+      </div>
+      <div className={block}>
+        <h3 className={h3}>실제로 호출한 모델</h3>
         {byModel.size === 0 ? (
-          <p className="text-muted-foreground">아직 호출이 없습니다.</p>
+          <p className="mt-2 text-sm text-muted-foreground">아직 호출이 없습니다.</p>
         ) : (
-          <ul className="space-y-1">
+          <ul className="mt-3 space-y-1.5 text-sm">
             {[...byModel.entries()].map(([k, e]) => (
               <li key={k}>
-                <code className="rounded bg-slate-100 px-1 text-sm">{k}</code> — {[...e.tasks].join(", ")} · 호출 {e.calls}회{e.cached ? `, 캐시 ${e.cached}회` : ""}
+                <code className="rounded bg-muted px-1 font-mono text-xs break-all">{k}</code> — {[...e.tasks].join(", ")} · 호출 {e.calls}회{e.cached ? `, 캐시 ${e.cached}회` : ""}
               </li>
             ))}
           </ul>
@@ -923,9 +1148,9 @@ function RunSummary({ w }: { w: W }) {
           {usage.known > 0 ? ` · 토큰 입력 ${usage.input.toLocaleString()} / 출력 ${usage.output.toLocaleString()}(공급자 보고값, ${usage.known}회분)` : ""}
         </p>
       </div>
-      <div>
-        <h2 className="mb-2 text-lg font-bold">자료 처리</h2>
-        <ul className="list-disc space-y-1 pl-5">
+      <div className={block}>
+        <h3 className={h3}>자료 처리</h3>
+        <ul className="mt-3 max-w-[70ch] list-disc space-y-1 pl-5 text-sm">
           <li>올린 PDF·사진·원고는 이 앱의 서버를 거쳐 위의 모델 공급자 API로 보냅니다. 홈페이지 주소는 Jina Reader(r.jina.ai)로 본문을 받습니다.</li>
           <li>서버는 올린 PDF·사진 파일을 디스크에 저장하지 않습니다.</li>
           {deployed ? (
@@ -939,62 +1164,69 @@ function RunSummary({ w }: { w: W }) {
           <li>얼굴·연락처·고객사 이름이 보이는 사진은 올리기 전에 확인하세요. 앱은 경고만 하고 가리지 않습니다.</li>
         </ul>
         {!deployed && (
-          <Button data-testid="clear-local-data" size="sm" variant="outline" className="mt-2" onClick={w.clearLocalData}>
+          <Button data-testid="clear-local-data" size="sm" variant="outline" className="mt-3" onClick={w.clearLocalData}>
             이 기기의 캐시와 실행 기록 모두 지우기
           </Button>
         )}
       </div>
-      <div>
-        <h2 className="mb-2 text-lg font-bold">카드 보드 전달</h2>
-        <p>외부 리뷰 작성자에게 카드 보드 파일을 보내면, 원본 PDF 없이 그 파일을 불러와 자기 원고를 검수할 수 있습니다. 파일에는 카드의 짧은 인용·문서명·쪽과 가이드라인만 들어갑니다.</p>
-        <div className="mt-2 flex flex-wrap gap-2">
+      <div className={block}>
+        <h3 className={h3}>카드 보드 전달</h3>
+        <p className="mt-2 max-w-[70ch] text-sm">
+          외부 리뷰 작성자에게 카드 보드 파일을 보내면, 원본 PDF 없이 그 파일을 불러와 자기 원고를 검수할 수 있습니다. 파일에는 카드의 짧은 인용·문서명·쪽과 가이드라인만 들어갑니다.
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
           <Button data-testid="board-export" size="sm" variant="outline" onClick={w.exportBoard} disabled={w.cards.length === 0}>
             카드 보드 내려받기(JSON)
           </Button>
-          <label className="inline-flex cursor-pointer items-center rounded-lg border px-2.5 py-1 text-sm font-medium hover:bg-muted">
-            카드 보드 불러오기
-            <input
-              data-testid="board-import"
-              type="file"
-              accept="application/json"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) void w.importBoard(f).then(() => document.getElementById("paste-check")?.scrollIntoView({ block: "start" }));
-                e.target.value = "";
-              }}
-            />
-          </label>
+          <FileButton
+            testid="board-import"
+            accept="application/json"
+            label="카드 보드 불러오기"
+            onFiles={(fs) => void w.importBoard(fs[0]).then(() => go("paste-check"))}
+          />
         </div>
-        {w.boardImported && <p className="mt-2 text-sm font-semibold text-emerald-800">{w.boardImported}에서 카드 {w.cards.length}장을 불러왔습니다. 아래 원고 검수에 바로 쓸 수 있습니다.</p>}
+        {w.boardImported && <p className="mt-2 text-sm font-medium text-success">{w.boardImported}에서 카드 {w.cards.length}장을 불러왔습니다. 외부 리뷰 원고 검수에 바로 쓸 수 있습니다.</p>}
       </div>
     </section>
   );
 }
 
-export function SectionHeader({ n, title, desc, children }: { n: number; title: string; desc: string; children?: React.ReactNode }) {
+/** 파일 선택 버튼. 입력은 화면에서 숨기되 키보드 초점은 받는다. */
+export function FileButton({
+  testid,
+  accept,
+  label,
+  icon,
+  multiple,
+  disabled,
+  onFiles,
+}: {
+  testid: string;
+  accept: string;
+  label: string;
+  icon?: React.ReactNode;
+  multiple?: boolean;
+  disabled?: boolean;
+  onFiles: (files: File[]) => void;
+}) {
   return (
-    <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-      <div>
-        <h2 className="flex items-center gap-3 text-2xl font-extrabold">
-          <span className="flex size-9 items-center justify-center rounded-full bg-slate-900 text-lg text-white">{n}</span>
-          {title}
-        </h2>
-        <p className="mt-1 text-[0.95rem] text-muted-foreground">{desc}</p>
-      </div>
-      <div className="flex flex-wrap items-center gap-2">{children}</div>
-    </div>
-  );
-}
-
-export function MetaLine({ metas, task }: { metas: LlmMeta[]; task: string }) {
-  const m = [...metas].reverse().find((x) => x.role === task);
-  if (!m) return null;
-  return (
-    <span className="text-xs text-muted-foreground">
-      {m.provider}:{m.model} · {formatMs(m.ms)}
-      {m.cached && <span className="ml-1 rounded bg-slate-200 px-1 text-slate-700">캐시</span>}
-    </span>
+    <label className={cn(buttonVariants({ variant: "outline", size: "sm" }), "cursor-pointer has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring/50", disabled && "pointer-events-none opacity-50")}>
+      {icon}
+      {label}
+      <input
+        type="file"
+        accept={accept}
+        data-testid={testid}
+        multiple={multiple}
+        disabled={disabled}
+        className="sr-only"
+        onChange={(e) => {
+          const fs = Array.from(e.target.files ?? []);
+          if (fs.length) onFiles(fs);
+          e.target.value = "";
+        }}
+      />
+    </label>
   );
 }
 
@@ -1011,33 +1243,13 @@ function AutoElapsed({ auto }: { auto: AutoState }) {
   return (
     <span
       data-testid="total-elapsed"
-      className={cn("rounded-md px-2 py-1 font-mono text-base font-bold tabular-nums", auto.running ? "bg-blue-600 text-white" : auto.error ? "bg-red-100 text-red-800" : "bg-emerald-100 text-emerald-900")}
+      className={cn(
+        "inline-flex h-9 items-center rounded-lg border px-2.5 text-sm font-semibold whitespace-nowrap tabular-nums",
+        auto.running ? "border-doc-border bg-doc-soft text-doc" : auto.error ? "border-danger-border bg-danger-soft text-danger" : "border-success-border bg-success-soft text-success",
+      )}
       title="자동 실행 시작부터 경과한 실제 시간"
     >
       {auto.running ? "경과" : auto.error ? "중단" : "완료"} {String(Math.floor(s / 60)).padStart(2, "0")}:{String(s % 60).padStart(2, "0")}
     </span>
   );
-}
-
-export function Running({ job, label }: { job: JobState; label: string }) {
-  const [elapsed, setElapsed] = useState(0);
-  useEffect(() => {
-    if (!job.running) return;
-    const t = setInterval(() => setElapsed(Date.now() - (job.startedAt ?? Date.now())), 1000);
-    return () => clearInterval(t);
-  }, [job.running, job.startedAt]);
-  if (job.running)
-    return (
-      <div className="flex items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-blue-900">
-        <span className="size-3 animate-pulse rounded-full bg-blue-500" />
-        {label} 진행 중 · {formatMs(elapsed)}
-      </div>
-    );
-  if (job.error)
-    return (
-      <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-red-900">
-        <b>실패:</b> {job.error} — 입력은 그대로 남아 있습니다. 버튼을 다시 누르면 재시도합니다.
-      </div>
-    );
-  return null;
 }
