@@ -14,7 +14,7 @@
 |---|---|---|
 | ![초안과 근거 칩](docs/images/draft-evidence-chips.png) | ![원고 검수 점검표](docs/images/paste-check-checklist.png) | ![카드와 수치 충돌](docs/images/cards-conflict.png) |
 
-화면은 공개 데모의 예시 보기에서 찍었습니다.
+화면은 공개 데모의 예시 보기에서 찍었습니다. 이 예시는 저장해 둔 다른 실행의 결과입니다(카드 9장). 측정 실행은 카드 10장·인용 23개였습니다. 실행마다 추출되는 카드 수가 달라질 수 있습니다.
 
 ## 측정 결과
 
