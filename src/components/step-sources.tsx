@@ -66,7 +66,7 @@ function CardTile({ w, card }: { w: W; card: Card }) {
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2">
-          <Checkbox checked={on} onCheckedChange={() => w.toggleCard(card.id)} aria-label={`${card.id} 콘텐츠에 사용`} />
+          <Checkbox data-testid="card-toggle" checked={on} onCheckedChange={() => w.toggleCard(card.id)} aria-label={`${card.id} 콘텐츠에 사용`} />
           <span className="rounded bg-slate-900 px-1.5 py-0.5 text-sm font-bold text-white">{card.id}</span>
           <span className="text-lg font-bold leading-tight">{card.name}</span>
         </div>
@@ -105,23 +105,38 @@ function CardTile({ w, card }: { w: W; card: Card }) {
             ))}
           </div>
           {conflicts.map((x) => (
-            <div key={x.id} className="rounded-lg border border-orange-300 bg-orange-50 p-2 text-sm">
-              <b>수치 충돌 · {x.metric}</b>
-              <ul className="ml-4 list-disc">
+            <div key={x.id} className={cn("rounded-lg border p-2 text-sm", x.approvedValue ? "border-emerald-300 bg-emerald-50" : "border-orange-300 bg-orange-50")}>
+              <b>
+                수치 충돌 · {x.metric}
+                {x.approvedValue ? ` — 승인한 값 ${x.approvedValue}` : " — 쓸 값을 골라 승인하세요(승인 전에는 초안에 쓰지 않음)"}
+              </b>
+              <ul className="mt-1 space-y-1">
                 {x.values.map((v, i) => (
-                  <li key={i}>
-                    <b>{v.value}</b> — {docLabel(w.docs, v.docId, v.page)}
+                  <li key={i} className="flex items-center justify-between gap-2">
+                    <span>
+                      <b>{v.value}</b> — {docLabel(w.docs, v.docId, v.page)}
+                    </span>
+                    {w.live && x.approvedValue !== v.value && (
+                      <Button data-testid="conflict-option" size="xs" variant="outline" onClick={() => w.approveConflict(x.id, v.value)}>
+                        이 값으로 승인
+                      </Button>
+                    )}
                   </li>
                 ))}
               </ul>
+              {w.live && x.approvedValue && (
+                <Button size="xs" variant="ghost" onClick={() => w.approveConflict(x.id, null)}>
+                  승인 취소
+                </Button>
+              )}
             </div>
           ))}
           {w.live && (
             <div className="mt-auto flex gap-2">
-              <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
+              <Button data-testid="card-edit" size="sm" variant="outline" onClick={() => setEditing(true)}>
                 <Pencil /> 고치기
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => w.removeCard(card.id)}>
+              <Button data-testid="card-remove" size="sm" variant="ghost" onClick={() => w.removeCard(card.id)}>
                 <Trash2 /> 빼기
               </Button>
             </div>
@@ -140,7 +155,7 @@ export function StepSources({ w }: { w: W }) {
     <section id="step-1" className="scroll-mt-32 rounded-2xl border bg-white p-6">
       <SectionHeader n={1} title="제품 분석 — 차별점 카드" desc="제품 자료 PDF와 홈페이지를 쪽 단위로 색인하고, 차별점마다 원문 인용과 문서·쪽을 붙입니다. 인용문은 서버 코드가 원문과 글자 단위로 대조합니다.">
         <MetaLine metas={w.metas} task="차별점 카드 추출" />
-        <Button size="lg" onClick={w.extractCards} disabled={Boolean(blockReason) || w.jobs.cards.running}>
+        <Button data-testid="cards-run" size="lg" onClick={w.extractCards} disabled={Boolean(blockReason) || w.jobs.cards.running}>
           <Sparkles /> 차별점 카드 뽑기
         </Button>
       </SectionHeader>
@@ -149,13 +164,23 @@ export function StepSources({ w }: { w: W }) {
       <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
         <div className="rounded-xl border p-4">
           <div className="mb-2 flex items-center justify-between">
-            <h3 className="font-bold">근거 문서 {w.docs.length}개</h3>
+            <h3 className="font-bold">
+              근거 문서 {w.docs.length}개
+              {w.pdfProgress && (
+                <span className="ml-2 text-sm font-semibold text-blue-800">
+                  {w.pdfProgress.emptyPages === null
+                    ? `PDF 쪽 색인 중: ${w.pdfProgress.name} ${w.pdfProgress.page}/${w.pdfProgress.total || "?"}쪽`
+                    : `${w.pdfProgress.name} ${w.pdfProgress.total}쪽 색인 완료${w.pdfProgress.emptyPages ? ` (글자 없는 쪽 ${w.pdfProgress.emptyPages}개)` : ""}`}
+                </span>
+              )}
+            </h3>
             {w.live && (
               <label className="inline-flex cursor-pointer items-center gap-1 rounded-lg border px-2.5 py-1 text-sm font-medium hover:bg-muted">
                 <Upload className="size-4" /> PDF 올리기
                 <input
                   type="file"
                   accept="application/pdf"
+                  data-testid="pdf-input"
                   className="hidden"
                   onChange={(e) => {
                     const f = e.target.files?.[0];
@@ -207,7 +232,7 @@ export function StepSources({ w }: { w: W }) {
           </form>
           <div className="mt-2 flex flex-wrap gap-2 text-sm">
             {SUGGESTED_URLS.map((s) => (
-              <button key={s.url} className="rounded-full border px-2.5 py-0.5 hover:bg-muted disabled:opacity-50" disabled={!w.live} onClick={() => w.ingestUrl(s.url)}>
+              <button key={s.url} data-testid={`url-${s.url.split("/").pop()?.replace(".php", "")}`} className="rounded-full border px-2.5 py-0.5 hover:bg-muted disabled:opacity-50" disabled={!w.live} onClick={() => w.ingestUrl(s.url)}>
                 {s.label} 페이지 넣기
               </button>
             ))}

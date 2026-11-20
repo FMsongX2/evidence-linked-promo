@@ -130,7 +130,7 @@ export function CardNews({ slides, photos, brand }: { slides: Generation["cardne
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-3">
-        <Button onClick={() => run("all")} disabled={busy !== null}>
+        <Button data-testid="cardnews-download" onClick={() => run("all")} disabled={busy !== null}>
           <Download /> {busy === "all" ? "PNG 저장 중…" : "PNG 5장 내려받기"}
         </Button>
         <span className="text-sm text-muted-foreground">1080×1350 · Pretendard · 사진은 자르지 않고 원본 비율로 배치</span>

@@ -113,7 +113,7 @@ function Checklist({ list, items, pending = false }: { list: ChecklistItem[]; it
   );
 }
 
-function WarningList({ w, r, onlySentence }: { w: W; r: CheckResult; onlySentence?: boolean }) {
+function WarningList({ w, r, onlySentence, onRewriteOne }: { w: W; r: CheckResult; onlySentence?: boolean; onRewriteOne?: (key: string) => void }) {
   const rows = r.warnings.filter((x) => (onlySentence ? x.sentenceKey : true));
   if (rows.length === 0) return <p className="rounded-lg border border-emerald-300 bg-emerald-50 p-4 font-semibold text-emerald-900">경고가 없습니다.</p>;
   const bySentence = new Map<string, Warning[]>();
@@ -131,7 +131,7 @@ function WarningList({ w, r, onlySentence }: { w: W; r: CheckResult; onlySentenc
         const split = (r.disagreements ?? []).find((d) => d.key === key);
         const linked = (item?.cardIds ?? []).map((id) => cardMap.get(id)).filter((c): c is Card => Boolean(c));
         return (
-          <div key={key} className="rounded-xl border border-red-200 bg-white p-4">
+          <div key={key} data-testid="warning-item" data-sentence-key={key} className="rounded-xl border border-red-200 bg-white p-4">
             <p className="text-[1.05rem] font-semibold">“{item?.text ?? key}”</p>
             {item && <EvidenceChips s={item} cards={w.cards} docs={w.docs} photos={w.photos} readings={w.readings} />}
             {split && (
@@ -171,6 +171,18 @@ function WarningList({ w, r, onlySentence }: { w: W; r: CheckResult; onlySentenc
                 <div className="text-xs font-bold text-emerald-800">고쳐 쓴 제안 (근거 {suggestion.cardIds.join(", ") || "없음"})</div>
                 <p className="text-[1.02rem]">{suggestion.text}</p>
               </div>
+            )}
+            {onRewriteOne && w.live && (
+              <Button
+                data-testid="rewrite-one"
+                size="sm"
+                variant="outline"
+                className="mt-3"
+                onClick={() => onRewriteOne(key)}
+                disabled={Boolean(w.modelBlock) || w.jobs.regen.running || w.jobs.check.running || w.jobs.paste.running || (r.suggestions.length > 0 && !suggestion)}
+              >
+                <Wand2 /> 이 문장만 다시 쓰기
+              </Button>
             )}
           </div>
         );
@@ -219,7 +231,7 @@ export function StepCheck({ w }: { w: W }) {
         title="게시 전 점검"
         desc="숫자·키워드·링크는 코드로 대조하고, 주장과 인용의 뜻이 맞는지와 강조 내용 반영은 생성에 쓰지 않은 다른 회사 모델이 판정합니다. 게시는 사람이 합니다."
       >
-        <Button size="lg" onClick={() => w.runCheck()} disabled={Boolean(blockReason) || w.jobs.check.running}>
+        <Button data-testid="check-run" size="lg" onClick={() => w.runCheck()} disabled={Boolean(blockReason) || w.jobs.check.running}>
           <ShieldCheck /> {r ? "다시 점검" : "점검하기"}
         </Button>
       </SectionHeader>
@@ -236,7 +248,7 @@ export function StepCheck({ w }: { w: W }) {
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="mr-auto text-lg font-bold">사양 경고 — 문장 {flaggedSentences}개</h3>
             {w.live && (
-              <Button variant="outline" onClick={w.regenerateFlagged} disabled={flaggedSentences === 0 || w.jobs.regen.running || w.jobs.check.running || Boolean(w.modelBlock)}>
+              <Button data-testid="rewrite-all" variant="outline" onClick={() => w.regenerateFlagged()} disabled={flaggedSentences === 0 || w.jobs.regen.running || w.jobs.check.running || Boolean(w.modelBlock)}>
                 <Wand2 /> 경고 문장만 다시 쓰기
               </Button>
             )}
@@ -257,11 +269,11 @@ export function StepCheck({ w }: { w: W }) {
             {copied && <span className="text-sm font-semibold text-emerald-700">{copied} 글을 복사했습니다.</span>}
           </div>
           {!w.approved && <p className="-mt-2 text-right text-sm text-muted-foreground">복사는 검수 승인 뒤에 켜집니다.</p>}
-          <WarningList w={w} r={r} onlySentence />
+          <WarningList w={w} r={r} onlySentence onRewriteOne={(k) => w.regenerateFlagged(k)} />
         </div>
       )}
 
-      <div className="space-y-4 border-t pt-6">
+      <div id="paste-check" className="scroll-mt-32 space-y-4 border-t pt-6">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h3 className="text-xl font-extrabold">외부 리뷰 원고 검수</h3>
@@ -271,21 +283,24 @@ export function StepCheck({ w }: { w: W }) {
           </div>
           <div className="flex gap-2">
             {w.live && (
-              <Button variant="ghost" onClick={() => w.setPaste(DEMO_PASTE)}>
+              <Button data-testid="paste-demo" variant="ghost" onClick={() => w.setPaste(DEMO_PASTE)}>
                 시연 원고 넣기
               </Button>
             )}
-            <Button size="lg" onClick={w.runPasteCheck} disabled={Boolean(pasteBlock) || w.jobs.paste.running}>
+            <Button data-testid="paste-check-run" size="lg" onClick={w.runPasteCheck} disabled={Boolean(pasteBlock) || w.jobs.paste.running}>
               <RefreshCw /> 원고 검수하기
             </Button>
           </div>
         </div>
         {pasteBlock && w.live && <p className="-mt-2 text-right text-sm text-muted-foreground">{pasteBlock}</p>}
-        <Textarea value={w.paste} onChange={(e) => w.setPaste(e.target.value)} rows={8} placeholder="리뷰 원고를 붙여 넣으세요(첫 줄은 제목으로 봅니다)." className="text-[1rem]" readOnly={!w.live} />
+        <Textarea data-testid="paste-input" value={w.paste} onChange={(e) => w.setPaste(e.target.value)} rows={8} placeholder="리뷰 원고를 붙여 넣으세요(첫 줄은 제목으로 봅니다)." className="text-[1rem]" readOnly={!w.live} />
         <Running job={w.jobs.paste} label={w.cards.length ? "원고 검수(문장 근거 연결 → 코드 대조 → 교차 판정 → 고쳐 쓴 제안)" : "원고 검수(차별점 카드 먼저 만드는 중)"} />
         {!w.pasteResult && w.guideline && <Checklist pending list={pendingChecklist(w)} items={[]} />}
         {w.pasteResult && (
           <div className="space-y-4">
+            <p data-testid="paste-run-status" className="text-sm font-semibold text-emerald-800">
+              검수 {w.pasteRun}회차 완료 · {new Date(w.pasteResult.checkedAt).toLocaleTimeString("ko-KR")} · 점검 {formatMs(w.pasteResult.elapsedMs)}
+            </p>
             <Metrics r={w.pasteResult} />
             {w.pasteResult.judgeError && <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-900">교차 판정 모델 호출 실패: {w.pasteResult.judgeError}</p>}
             {w.pasteResult.suggestError && <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-900">고쳐 쓴 제안 생성 실패: {w.pasteResult.suggestError}</p>}
@@ -293,7 +308,7 @@ export function StepCheck({ w }: { w: W }) {
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="mr-auto text-lg font-bold">사양 경고 — 문장 {new Set(w.pasteResult.warnings.map((x) => x.sentenceKey).filter(Boolean)).size}개</h3>
               {w.live && (
-                <Button variant="outline" onClick={w.applySuggestions} disabled={w.pasteResult.suggestions.length === 0 || w.jobs.paste.running || Boolean(w.modelBlock)}>
+                <Button data-testid="rewrite-all-paste" variant="outline" onClick={() => w.applySuggestions()} disabled={w.pasteResult.suggestions.length === 0 || w.jobs.paste.running || Boolean(w.modelBlock)}>
                   <Wand2 /> 경고 문장만 제안대로 고치고 다시 검수
                 </Button>
               )}
@@ -301,7 +316,7 @@ export function StepCheck({ w }: { w: W }) {
                 점검 기록(JSON) 내려받기
               </Button>
             </div>
-            <WarningList w={w} r={w.pasteResult} onlySentence />
+            <WarningList w={w} r={w.pasteResult} onlySentence onRewriteOne={(k) => w.applySuggestions(k)} />
           </div>
         )}
       </div>

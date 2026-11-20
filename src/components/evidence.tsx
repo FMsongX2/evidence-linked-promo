@@ -50,6 +50,7 @@ function CardChip({ card, docs }: { card: Card; docs: DocLite[] }) {
   return (
     <Popover>
       <PopoverTrigger
+        data-testid="evidence-chip"
         className={cn(
           "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 align-middle text-xs font-semibold",
           bad ? "border-orange-300 bg-orange-50 text-orange-800" : "border-blue-300 bg-blue-50 text-blue-800",
@@ -78,7 +79,7 @@ function PhotoChip({ id, photos, readings }: { id: string; photos: Photo[]; read
   const r = readings.find((x) => x.photoId === id);
   return (
     <Popover>
-      <PopoverTrigger className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-1.5 py-0.5 align-middle text-xs font-semibold text-amber-900">
+      <PopoverTrigger data-testid="photo-chip" className="inline-flex items-center gap-1 rounded-md border border-orange-300 bg-orange-50 px-1.5 py-0.5 align-middle text-xs font-semibold text-orange-900">
         <ImageIcon className="size-3" />
         사진 {id}
       </PopoverTrigger>
@@ -111,7 +112,7 @@ export function EvidenceChips({ s, cards, docs, photos, readings }: { s: Sentenc
         <PhotoChip key={id} id={id} photos={photos} readings={readings} />
       ))}
       {s.kind === "fact" && s.cardIds.length + s.photoIds.length === 0 && (
-        <span className="rounded-md border border-red-300 bg-red-50 px-1.5 py-0.5 text-xs font-semibold text-red-800">근거 없음</span>
+        <span className="rounded-md border border-slate-300 bg-slate-100 px-1.5 py-0.5 text-xs font-semibold text-slate-600">근거 없음</span>
       )}
     </span>
   );

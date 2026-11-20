@@ -31,6 +31,7 @@ export type TlinkPhoto = {
   alt?: string;
   industry?: string;
   officialFieldPhoto?: boolean;
+  note?: string;
   license?: string;
   width?: number;
   height?: number;
@@ -82,11 +83,13 @@ export function useWorkbench() {
   const [approved, setApproved] = useState(false);
   const [paste, setPaste] = useState("");
   const [pasteResult, setPasteResult] = useState<CheckResult | null>(null);
+  const [pasteRun, setPasteRun] = useState(0);
   const [metas, setMetas] = useState<LlmMeta[]>([]);
   const [photoStartAt, setPhotoStartAt] = useState<number | null>(null);
   const [photoToDraftMs, setPhotoToDraftMs] = useState<number | null>(null);
   const [jobs, setJobs] = useState<Record<Job, JobState>>({ cards: idle, photos: idle, generate: idle, check: idle, paste: idle, regen: idle, load: idle });
   const [auto, setAuto] = useState<AutoState | null>(null);
+  const [pdfProgress, setPdfProgress] = useState<{ name: string; page: number; total: number; emptyPages: number | null } | null>(null);
   /** 사람이 누른 횟수(측정 기록용) */
   const [userActions, setUserActions] = useState(0);
   const userActionsRef = useRef(0);
@@ -184,10 +187,31 @@ export function useWorkbench() {
     await runJob("load", async () => {
       const fd = new FormData();
       fd.append("file", file);
+      setPdfProgress({ name: file.name, page: 0, total: 0, emptyPages: null });
       const res = await fetch("/api/ingest/pdf", { method: "POST", body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "PDF를 읽지 못했습니다.");
-      addDoc(data.doc);
+      if (!res.ok || !res.body) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? "PDF를 읽지 못했습니다.");
+      }
+      // 줄 단위 JSON 스트림에서 쪽 색인 진행을 읽는다.
+      const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+      let buf = "";
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += value;
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const msg = JSON.parse(line);
+          if (msg.type === "progress") setPdfProgress({ name: file.name, page: msg.page, total: msg.total, emptyPages: null });
+          else if (msg.type === "done") {
+            addDoc(msg.doc);
+            setPdfProgress({ name: file.name, page: msg.doc.pages.length, total: msg.doc.pages.length, emptyPages: msg.emptyPages });
+          } else if (msg.type === "error") throw new Error(`PDF 색인 실패: ${msg.error}`);
+        }
+      }
     });
   }
 
@@ -389,9 +413,11 @@ export function useWorkbench() {
     setApproved(false);
   }
 
-  async function regenerateFlagged() {
+  /** 경고 문장을 다시 쓴다. onlyKey를 주면 그 문장 하나만. */
+  async function regenerateFlagged(onlyKey?: string) {
     if (!generation || !check) return;
-    const keys = new Set(check.warnings.map((w) => w.sentenceKey).filter((k): k is string => Boolean(k)));
+    const flagged = check.warnings.map((w) => w.sentenceKey).filter((k): k is string => Boolean(k));
+    const keys = new Set(onlyKey ? flagged.filter((k) => k === onlyKey) : flagged);
     const items: CheckItem[] = flattenGeneration(generation).filter((i) => keys.has(i.key));
     if (items.length === 0) return;
     const gen = await runJob("regen", async () => {
@@ -412,6 +438,9 @@ export function useWorkbench() {
 
   /** 원고 붙여넣기 점검. 카드가 없으면 자료를 불러와 카드를 먼저 만들고, 있으면 그대로 쓴다. */
   async function runPasteCheck(text: string = paste) {
+    // 두 번째 실행부터 끝을 구분할 수 있게 이전 결과를 지우고 회차를 올린다.
+    setPasteResult(null);
+    setPasteRun((n) => n + 1);
     const r = await runJob("paste", async () => {
       let useDocs = docs;
       let useGuideline = guideline;
@@ -445,10 +474,10 @@ export function useWorkbench() {
     if (r) void saveRunLog("paste", r);
   }
 
-  /** 경고 문장만 고쳐 쓴 제안으로 바꾼 원고를 다시 점검한다. */
-  async function applySuggestions() {
+  /** 경고 문장을 고쳐 쓴 제안으로 바꾼 원고를 다시 점검한다. onlyKey를 주면 그 문장 하나만 바꾼다. */
+  async function applySuggestions(onlyKey?: string) {
     if (!pasteResult) return;
-    const lines = pasteResult.items.map((i) => pasteResult.suggestions.find((s) => s.key === i.key)?.text ?? i.text);
+    const lines = pasteResult.items.map((i) => (onlyKey && i.key !== onlyKey ? i.text : (pasteResult.suggestions.find((s) => s.key === i.key)?.text ?? i.text)));
     const text = lines.join("\n");
     setPaste(text);
     await runPasteCheck(text);
@@ -618,6 +647,8 @@ export function useWorkbench() {
     photoToDraftMs,
     jobs,
     auto,
+    pdfProgress,
+    pasteRun,
     userActions,
     modelBlock,
     visionBlock,
@@ -638,9 +669,9 @@ export function useWorkbench() {
     generate: tap(generate),
     runCheck: tap(runCheck),
     editSentence: tap(editSentence),
-    regenerateFlagged: tap(regenerateFlagged),
+    regenerateFlagged: tap((key?: string) => regenerateFlagged(key)),
     runPasteCheck: tap(() => runPasteCheck()),
-    applySuggestions: tap(applySuggestions),
+    applySuggestions: tap((key?: string) => applySuggestions(key)),
     autoRun: tap(autoRun),
     downloadRunLog,
     saveExample,
@@ -670,15 +701,26 @@ function stepState(w: W, n: number): { label: string; tone: "idle" | "run" | "do
 export function Workbench() {
   const w = useWorkbench();
   const p = w.mode === "example" ? w.exampleProviders : w.config?.providers;
+  // ?step=check: 자료와 가이드라인을 불러와 원고 검수 화면(17개 항목 목록)으로 바로 연다.
+  const opened = useRef(false);
+  const { config, loadTlink } = w;
+  useEffect(() => {
+    if (opened.current || !config) return;
+    if (new URLSearchParams(window.location.search).get("step") !== "check") return;
+    opened.current = true;
+    const go = () => document.getElementById("paste-check")?.scrollIntoView({ block: "start" });
+    if (config.data.available) void loadTlink().then(() => setTimeout(go, 50));
+    else go();
+  }, [config, loadTlink]);
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="sticky top-0 z-30 border-b bg-white/95 backdrop-blur">
         <div className="mx-auto flex max-w-[1800px] items-center gap-6 px-6 py-3">
-          <div className="min-w-0">
+          <div className="min-w-0 max-w-[24rem] shrink">
             <h1 className="text-xl font-extrabold tracking-tight">근거 달린 홍보문</h1>
             <p className="text-sm text-muted-foreground">사진과 제품 정보에서 게시 전 점검까지 끝난 초안을 자동으로 만듭니다. 사람은 확인하고 승인만 합니다.</p>
           </div>
-          <nav className="flex flex-1 items-center justify-center gap-2">
+          <nav className="flex flex-1 items-center justify-center gap-1.5">
             {STEPS.map((s) => {
               const st = stepState(w, s.n);
               return (
@@ -686,7 +728,7 @@ export function Workbench() {
                   key={s.id}
                   href={`#${s.id}`}
                   className={cn(
-                    "flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-semibold",
+                    "flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-sm font-semibold",
                     st.tone === "done" && "border-emerald-300 bg-emerald-50 text-emerald-800",
                     st.tone === "run" && "border-blue-300 bg-blue-50 text-blue-800",
                     st.tone === "error" && "border-red-300 bg-red-50 text-red-800",
@@ -701,21 +743,23 @@ export function Workbench() {
             })}
           </nav>
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={w.loadTlink} disabled={w.jobs.load.running}>
+            <Button data-testid="load-tlink" variant="outline" onClick={w.loadTlink} disabled={w.jobs.load.running}>
               <FolderOpen /> 티링크 자료 불러오기
             </Button>
-            <Button variant="outline" onClick={w.loadExample} disabled={w.jobs.load.running}>
+            <Button data-testid="load-example" variant="outline" onClick={w.loadExample} disabled={w.jobs.load.running}>
               <Eye /> 티링크 예시로 보기
             </Button>
             <Button
+              data-testid="auto-run"
               onClick={w.autoRun}
               disabled={Boolean(w.modelBlock) || w.docs.length === 0 || Boolean(w.auto?.running)}
               title={w.modelBlock ?? (w.docs.length === 0 ? "자료를 먼저 불러오세요." : "카드 추출 → 사진 판독 → 초안 생성 → 게시 전 점검을 이어서 실행")}
             >
               <Play /> 자동 실행
             </Button>
+            {w.auto && <AutoElapsed auto={w.auto} />}
             {w.live && w.config && !w.config.deployed && w.check && (
-              <Button variant="ghost" size="sm" onClick={w.saveExample} title="현재 실행 결과를 공개 데모용 예시 결과로 저장(로컬 전용)">
+              <Button data-testid="save-example" variant="ghost" size="sm" onClick={w.saveExample} title="현재 실행 결과를 공개 데모용 예시 결과로 저장(로컬 전용)">
                 <Save /> 예시로 저장
               </Button>
             )}
@@ -738,7 +782,7 @@ export function Workbench() {
           )}
         </div>
         {w.mode === "example" && (
-          <div className="border-t bg-amber-50 px-6 py-2 text-center text-sm font-semibold text-amber-900">
+          <div data-testid="example-banner" className="border-t bg-amber-50 px-6 py-2 text-center text-sm font-semibold text-amber-900">
             미리 계산한 예시 결과입니다({w.exampleSavedAt ? new Date(w.exampleSavedAt).toLocaleString("ko-KR") : ""} 실제 실행 출력). 원본 문서 전문은 포함하지 않았습니다.{" "}
             <button className="underline" onClick={w.startLive}>
               처음부터 직접 실행
@@ -778,6 +822,27 @@ export function MetaLine({ metas, task }: { metas: LlmMeta[]; task: string }) {
     <span className="text-xs text-muted-foreground">
       {m.provider}:{m.model} · {formatMs(m.ms)}
       {m.cached && <span className="ml-1 rounded bg-slate-200 px-1 text-slate-700">캐시</span>}
+    </span>
+  );
+}
+
+/** 자동 실행 총 경과 시간. 실행 중에는 1초마다 갱신하고, 끝나면 측정한 총 시간을 그대로 보인다. */
+function AutoElapsed({ auto }: { auto: AutoState }) {
+  const [now, setNow] = useState(auto.startedAt);
+  useEffect(() => {
+    if (!auto.running) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [auto.running]);
+  const ms = auto.running ? Math.max(0, now - auto.startedAt) : (auto.totalMs ?? 0);
+  const s = Math.floor(ms / 1000);
+  return (
+    <span
+      data-testid="total-elapsed"
+      className={cn("rounded-md px-2 py-1 font-mono text-base font-bold tabular-nums", auto.running ? "bg-blue-600 text-white" : auto.error ? "bg-red-100 text-red-800" : "bg-emerald-100 text-emerald-900")}
+      title="자동 실행 시작부터 경과한 실제 시간"
+    >
+      {auto.running ? "경과" : auto.error ? "중단" : "완료"} {String(Math.floor(s / 60)).padStart(2, "0")}:{String(s % 60).padStart(2, "0")}
     </span>
   );
 }

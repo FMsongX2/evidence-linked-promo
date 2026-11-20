@@ -70,7 +70,7 @@ export function StepContent({ w }: { w: W }) {
       >
         <MetaLine metas={w.metas} task="콘텐츠 생성" />
         {w.photoToDraftMs !== null && <span className="rounded-md bg-slate-900 px-2 py-1 text-sm font-semibold text-white">사진 업로드 → 초안 {formatMs(w.photoToDraftMs)}</span>}
-        <Button size="lg" onClick={w.generate} disabled={Boolean(blockReason) || w.jobs.generate.running}>
+        <Button data-testid="generate-run" size="lg" onClick={w.generate} disabled={Boolean(blockReason) || w.jobs.generate.running}>
           <Wand2 /> 초안 만들기
         </Button>
       </SectionHeader>
@@ -80,13 +80,13 @@ export function StepContent({ w }: { w: W }) {
       {g && (
         <Tabs defaultValue="blog" className="mt-2">
           <TabsList className="h-11">
-            <TabsTrigger value="blog" className="px-4 text-base">
+            <TabsTrigger data-testid="tab-blog" value="blog" className="px-4 text-base">
               네이버 블로그 리뷰형 초안
             </TabsTrigger>
-            <TabsTrigger value="cards" className="px-4 text-base">
+            <TabsTrigger data-testid="tab-cardnews" value="cards" className="px-4 text-base">
               인스타그램 카드뉴스 5장
             </TabsTrigger>
-            <TabsTrigger value="case" className="px-4 text-base">
+            <TabsTrigger data-testid="tab-case" value="case" className="px-4 text-base">
               설치 사례 짧은 글
             </TabsTrigger>
           </TabsList>

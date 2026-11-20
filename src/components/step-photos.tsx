@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { AlertTriangle, ScanEye, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -10,7 +11,7 @@ const OFFICIAL_LABEL = "티링크 홈페이지 설치 사례(tlinkcrm.com/case.p
 
 function tlinkLabel(p: TlinkPhoto): string {
   if (p.officialFieldPhoto) return `${OFFICIAL_LABEL}${p.industry ? ` · ${p.industry}` : ""}`;
-  return `티링크 공식 블로그${p.license ? ` · ${p.license}` : ""}`;
+  return `티링크 공식 블로그${p.pageUrl ? ` (${p.pageUrl})` : ""}`;
 }
 
 function PhotoThumb({ p, onRemove }: { p: Photo; onRemove?: () => void }) {
@@ -38,6 +39,7 @@ function PhotoThumb({ p, onRemove }: { p: Photo; onRemove?: () => void }) {
 }
 
 export function StepPhotos({ w }: { w: W }) {
+  const [acked, setAcked] = useState<string[]>([]);
   const full = w.photos.length >= (w.config?.limits.photos ?? 5);
   const blockReason = w.visionBlock ?? (w.cards.length === 0 ? "1단계 차별점 카드가 먼저 필요합니다." : w.photos.length === 0 ? "사진을 1장 이상 넣으세요." : null);
   const inTray = new Set(w.photos.map((p) => p.sourceUrl).filter(Boolean));
@@ -45,7 +47,7 @@ export function StepPhotos({ w }: { w: W }) {
     <section id="step-2" className="scroll-mt-32 rounded-2xl border bg-white p-6">
       <SectionHeader n={2} title="현장 사진 판독과 카드 연결" desc="사진 1~5장(긴 변 1,600px 이하로 줄여 보냄)의 종류와 보이는 것을 읽고 관련 차별점 카드를 연결합니다. 사진에서 나온 내용은 '사진 근거'로 따로 표시합니다.">
         <MetaLine metas={w.metas} task="사진 판독" />
-        <Button size="lg" onClick={w.readPhotos} disabled={Boolean(blockReason) || w.jobs.photos.running}>
+        <Button data-testid="photos-run" size="lg" onClick={w.readPhotos} disabled={Boolean(blockReason) || w.jobs.photos.running}>
           <ScanEye /> 사진 판독하기
         </Button>
       </SectionHeader>
@@ -60,6 +62,7 @@ export function StepPhotos({ w }: { w: W }) {
               <input
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
+                data-testid="photo-input"
                 multiple
                 className="hidden"
                 onChange={(e) => {
@@ -88,8 +91,10 @@ export function StepPhotos({ w }: { w: W }) {
               {w.tlinkPhotos.map((p) => (
                 <button
                   key={p.file}
+                  data-testid="photo-candidate"
+                  data-kind={p.officialFieldPhoto ? "case" : "blog"}
                   disabled={full || inTray.has(p.sourceUrl) || w.jobs.photos.running}
-                  onClick={() => w.addPhotoUrl(p.url, { name: p.alt || p.file, sourceUrl: p.sourceUrl, sourceLabel: tlinkLabel(p) })}
+                  onClick={() => w.addPhotoUrl(p.url, { name: p.alt || p.note?.split(/[.,]/)[0] || p.file, sourceUrl: p.sourceUrl, sourceLabel: tlinkLabel(p) })}
                   className="group relative h-24 w-24 overflow-hidden rounded-md border bg-slate-100 disabled:opacity-40"
                   title={`${p.alt ?? p.file}\n출처: ${tlinkLabel(p)}`}
                 >
@@ -102,6 +107,8 @@ export function StepPhotos({ w }: { w: W }) {
               {w.pageImages.map((p) => (
                 <button
                   key={p.src}
+                  data-testid="photo-candidate"
+                  data-kind="url"
                   disabled={full || inTray.has(p.src) || w.jobs.photos.running}
                   onClick={() =>
                     w.addPhotoUrl(`/api/image?src=${encodeURIComponent(p.src)}`, { name: p.alt || p.src.split("/").pop()!, sourceUrl: p.src, sourceLabel: `홈페이지 ${p.pageUrl}` })
@@ -151,11 +158,18 @@ export function StepPhotos({ w }: { w: W }) {
                     })}
                   </div>
                   {r.exposure.length > 0 && (
-                    <div className="flex gap-2 rounded-lg border border-red-300 bg-red-50 p-2 text-sm text-red-900">
-                      <AlertTriangle className="size-4 shrink-0" />
-                      <span>
+                    <div className={cn("flex items-start gap-2 rounded-lg border p-2 text-sm", acked.includes(r.photoId) ? "border-slate-300 bg-slate-50 text-slate-700" : "border-red-300 bg-red-50 text-red-900")}>
+                      <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                      <span className="flex-1">
                         <b>노출 경고</b>(자동으로 가리지 않습니다): {r.exposure.map((x) => x.detail).join(" · ")}
                       </span>
+                      {acked.includes(r.photoId) ? (
+                        <span className="shrink-0 font-semibold">확인함</span>
+                      ) : (
+                        <Button size="sm" variant="outline" onClick={() => setAcked((a) => [...a, r.photoId])}>
+                          확인
+                        </Button>
+                      )}
                     </div>
                   )}
                 </div>
