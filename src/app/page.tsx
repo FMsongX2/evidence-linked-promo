@@ -1,6 +1,7 @@
 import { Workbench } from "@/components/workbench";
 
 const REPO_URL = "https://github.com/FMsongX2/evidence-linked-promo";
+const VIDEO_URL = "https://www.youtube.com/watch?v=I9m6qECYPU0";
 
 export default function Page() {
   return (
@@ -21,6 +22,12 @@ export default function Page() {
           <p className="mt-2">
             측정 결과(로컬 측정 구성: 생성 deepseek-ai/deepseek-v4.1-flash-1017, 판정 claude-opus-5-5): 실제 사양을 고쳐 만든 고정 문장 10개 중 10개 경고, 바르게 쓴 짝 문장 10개 오경고 0개, 문장
             20개 점검 18.3초.
+          </p>
+          <p className="mt-2">
+            시연 영상:{" "}
+            <a className="font-semibold text-blue-700 underline" href={VIDEO_URL}>
+              {VIDEO_URL}
+            </a>
           </p>
           <p className="mt-2">
             소스 코드와 측정 기록:{" "}
