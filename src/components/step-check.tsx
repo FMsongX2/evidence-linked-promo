@@ -253,7 +253,9 @@ export function StepCheck({ w }: { w: W }) {
     setCopied(label);
     setTimeout(() => setCopied(null), 2000);
   }
-  const pasteBlock = w.modelBlock ?? (w.paste.trim().length === 0 ? "원고를 붙여 넣으세요." : null);
+  // 원고 검수는 예시 보기에서도 서버에 모델 키가 있으면 예시 카드로 바로 돌릴 수 있다.
+  const pasteModelBlock = w.live ? w.modelBlock : w.config?.providers.main ? null : (w.config?.providers.mainReason ?? "모델을 쓸 수 없습니다.");
+  const pasteBlock = pasteModelBlock ?? (w.paste.trim().length === 0 ? "원고를 붙여 넣으세요." : null);
   return (
     <section id="step-4" className="scroll-mt-32 space-y-6 rounded-2xl border bg-white p-6">
       <SectionHeader
@@ -323,8 +325,8 @@ export function StepCheck({ w }: { w: W }) {
             </Button>
           </div>
         </div>
-        {pasteBlock && w.live && <p className="-mt-2 text-right text-sm text-muted-foreground">{pasteBlock}</p>}
-        <Textarea data-testid="paste-input" value={w.paste} onChange={(e) => w.setPaste(e.target.value)} rows={8} placeholder="리뷰 원고를 붙여 넣으세요(첫 줄은 제목으로 봅니다)." className="text-[1rem]" readOnly={!w.live} />
+        {pasteBlock && <p className="-mt-2 text-right text-sm text-muted-foreground">{pasteBlock}</p>}
+        <Textarea data-testid="paste-input" value={w.paste} onChange={(e) => w.setPaste(e.target.value)} rows={8} placeholder="리뷰 원고를 붙여 넣으세요(첫 줄은 제목으로 봅니다)." className="text-[1rem]" readOnly={Boolean(pasteModelBlock)} />
         <Running job={w.jobs.paste} label={w.cards.length ? "원고 검수(문장 근거 연결 → 코드 대조 → 교차 판정 → 고쳐 쓴 제안)" : "원고 검수(차별점 카드 먼저 만드는 중)"} />
         {!w.pasteResult && w.guideline && <Checklist pending list={pendingChecklist(w)} items={[]} />}
         {w.pasteResult && (
