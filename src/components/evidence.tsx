@@ -1,29 +1,39 @@
 "use client";
 
-import { FileText, ImageIcon } from "lucide-react";
+import { CircleAlert, CircleCheck, FileText, ImageIcon, TriangleAlert } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { ItemSource } from "@/lib/check";
 import type { Card, Evidence, PhotoReading, Sentence, SourceDoc, Warning } from "@/lib/schemas";
 import { cn } from "@/lib/utils";
 import { PHOTO_KIND_LABEL, WARNING_LABEL, docLabel, type Photo } from "./model";
+import { Pill } from "./step-frame";
 
 type DocLite = Pick<SourceDoc, "id" | "title" | "kind"> & { pages?: SourceDoc["pages"] };
 
 export function MatchBadge({ ev }: { ev: Evidence }) {
-  if (ev.match === "exact") return <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-xs font-semibold text-emerald-800">원문 일치</span>;
-  if (ev.match === "approx")
-    return <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-xs font-semibold text-emerald-700">근사 일치 {Math.round(ev.score * 100)}%</span>;
-  return <span className="rounded bg-red-100 px-1.5 py-0.5 text-xs font-semibold text-red-800">근거 미확인</span>;
+  if (ev.match === "exact") return <Pill tone="success">원문 일치</Pill>;
+  if (ev.match === "approx") return <Pill tone="success">근사 일치 {Math.round(ev.score * 100)}%</Pill>;
+  return <Pill tone="danger">근거 미확인</Pill>;
 }
 
 export function StatusBadge({ status }: { status: Card["status"] }) {
-  const map = {
-    confirmed: ["확인", "bg-emerald-600 text-white"],
-    unverified: ["근거 미확인", "bg-red-600 text-white"],
-    conflict: ["수치 충돌", "bg-orange-500 text-white"],
-  } as const;
-  const [label, cls] = map[status];
-  return <span className={cn("rounded-md px-2 py-0.5 text-sm font-semibold", cls)}>{label}</span>;
+  if (status === "confirmed")
+    return (
+      <Pill tone="success">
+        <CircleCheck aria-hidden className="size-3.5" /> 확인
+      </Pill>
+    );
+  if (status === "conflict")
+    return (
+      <Pill tone="warning">
+        <TriangleAlert aria-hidden className="size-3.5" /> 수치 충돌
+      </Pill>
+    );
+  return (
+    <Pill tone="danger">
+      <CircleAlert aria-hidden className="size-3.5" /> 근거 미확인
+    </Pill>
+  );
 }
 
 /** 인용문과, 원문이 있으면 그 쪽 텍스트를 보여 준다. */
@@ -32,14 +42,17 @@ export function EvidenceDetail({ ev, docs }: { ev: Evidence; docs: DocLite[] }) 
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-semibold">{docLabel(docs, ev.docId, ev.page)}</span>
+        <span className="flex items-center gap-1.5 text-sm font-medium">
+          <FileText aria-hidden className="size-4 shrink-0 text-doc" />
+          {docLabel(docs, ev.docId, ev.page)}
+        </span>
         <MatchBadge ev={ev} />
       </div>
-      <blockquote className="border-l-4 border-blue-400 bg-blue-50 px-3 py-2 text-[0.95rem] leading-relaxed">“{ev.quote}”</blockquote>
+      <blockquote className="rounded-lg border border-doc-border bg-doc-soft px-3 py-2 text-sm">“{ev.quote}”</blockquote>
       {page && (
         <details className="text-sm text-muted-foreground">
-          <summary className="cursor-pointer">이 쪽 원문 전체 보기</summary>
-          <pre className="mt-1 max-h-56 overflow-auto whitespace-pre-wrap rounded bg-muted p-2 font-sans text-xs leading-relaxed">{page.text}</pre>
+          <summary className="hover:text-foreground">이 쪽 원문 전체 보기</summary>
+          <pre className="mt-1 max-h-56 overflow-auto rounded-lg bg-muted p-3 font-sans text-xs whitespace-pre-wrap">{page.text}</pre>
         </details>
       )}
     </div>
@@ -53,16 +66,16 @@ function CardChip({ card, docs }: { card: Card; docs: DocLite[] }) {
       <PopoverTrigger
         data-testid="evidence-chip"
         className={cn(
-          "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 align-middle text-xs font-semibold",
-          bad ? "border-orange-300 bg-orange-50 text-orange-800" : "border-blue-300 bg-blue-50 text-blue-800",
+          "inline-flex items-center gap-1 rounded-md border px-1.5 py-px align-middle text-xs font-medium hover:brightness-95",
+          bad ? "border-warning-border bg-warning-soft text-warning" : "border-doc-border bg-doc-soft text-doc",
         )}
       >
         <FileText className="size-3" />
         {card.id} {card.evidence[0] ? docLabel(docs, card.evidence[0].docId, card.evidence[0].page) : ""}
         {card.evidence.length > 1 ? ` 외 ${card.evidence.length - 1}` : ""}
       </PopoverTrigger>
-      <PopoverContent className="w-[34rem] max-w-[90vw] space-y-3">
-        <div className="text-sm font-bold">
+      <PopoverContent className="w-[34rem] max-w-[calc(100vw-2rem)] space-y-3 p-4">
+        <div className="text-sm font-semibold">
           {card.id} {card.name}
         </div>
         <p className="text-sm">{card.claim}</p>
@@ -80,12 +93,12 @@ function PhotoChip({ id, photos, readings }: { id: string; photos: Photo[]; read
   const r = readings.find((x) => x.photoId === id);
   return (
     <Popover>
-      <PopoverTrigger data-testid="photo-chip" className="inline-flex items-center gap-1 rounded-md border border-orange-300 bg-orange-50 px-1.5 py-0.5 align-middle text-xs font-semibold text-orange-900">
+      <PopoverTrigger data-testid="photo-chip" className="inline-flex items-center gap-1 rounded-md border border-photo-border bg-photo-soft px-1.5 py-px align-middle text-xs font-medium text-photo hover:brightness-95">
         <ImageIcon className="size-3" />
         사진 {id}
       </PopoverTrigger>
-      <PopoverContent className="w-96 space-y-2">
-        {p?.src && <img src={p.src} alt={p.name} className="max-h-56 w-full rounded object-contain" />}
+      <PopoverContent className="w-96 max-w-[calc(100vw-2rem)] space-y-2 p-4">
+        {p?.src && <img src={p.src} alt={p.name} className="max-h-56 w-full rounded-lg object-contain" />}
         <div className="text-sm font-semibold">
           사진 근거 {id} {r ? `· ${PHOTO_KIND_LABEL[r.kind]}` : ""}
         </div>
@@ -104,18 +117,18 @@ export function EvidenceChips({ s, cards, docs, photos, readings }: { s: Sentenc
         return c ? (
           <CardChip key={id} card={c} docs={docs} />
         ) : (
-          <span key={id} className="rounded-md border border-red-300 bg-red-50 px-1.5 py-0.5 text-xs font-semibold text-red-800">
+          <Pill key={id} tone="danger">
             {id} 없음
-          </span>
+          </Pill>
         );
       })}
       {(s.sources ?? []).map((src, i) => (
         <Popover key={`src-${i}`}>
-          <PopoverTrigger data-testid="evidence-chip" className="inline-flex items-center gap-1 rounded-md border border-blue-300 bg-blue-50 px-1.5 py-0.5 align-middle text-xs font-semibold text-blue-800">
+          <PopoverTrigger data-testid="evidence-chip" className="inline-flex items-center gap-1 rounded-md border border-doc-border bg-doc-soft px-1.5 py-px align-middle text-xs font-medium text-doc hover:brightness-95">
             <FileText className="size-3" />
             {docLabel(docs, src.docId, src.page)}
           </PopoverTrigger>
-          <PopoverContent className="w-[34rem] max-w-[90vw]">
+          <PopoverContent className="w-[34rem] max-w-[calc(100vw-2rem)] p-4">
             <EvidenceDetail ev={{ ...src, match: "exact", score: 1 }} docs={docs} />
           </PopoverContent>
         </Popover>
@@ -124,7 +137,7 @@ export function EvidenceChips({ s, cards, docs, photos, readings }: { s: Sentenc
         <PhotoChip key={id} id={id} photos={photos} readings={readings} />
       ))}
       {s.kind === "fact" && s.cardIds.length + s.photoIds.length + (s.sources?.length ?? 0) === 0 && (
-        <span data-testid="no-evidence-chip" className="rounded-md border border-slate-300 bg-slate-100 px-1.5 py-0.5 text-xs font-semibold text-slate-600">근거 없음</span>
+        <Pill data-testid="no-evidence-chip">근거 없음</Pill>
       )}
     </span>
   );
@@ -135,9 +148,9 @@ export function WarningTags({ warnings }: { warnings: Warning[] }) {
   return (
     <span className="ml-1 inline-flex flex-wrap gap-1 align-middle">
       {warnings.map((w) => (
-        <span key={w.id} title={`${w.message}${w.detail ? `\n${w.detail}` : ""}`} className="rounded bg-red-600 px-1.5 py-0.5 text-xs font-semibold text-white">
+        <Pill key={w.id} tone="danger" title={`${w.message}${w.detail ? `\n${w.detail}` : ""}`}>
           {WARNING_LABEL[w.type]}
-        </span>
+        </Pill>
       ))}
     </span>
   );
