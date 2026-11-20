@@ -61,7 +61,8 @@ function hasKey(p: ProviderName): boolean {
 
 function defaultSpec(role: Role): ModelSpec | null {
   if (role === "judge") {
-    if (!isDeployed) return { provider: "agy-cli", model: "gemini-4-argon-high" };
+    // 로컬 agy-cli(Gemini)는 긴 판정 요청에서 10분 넘게 응답하지 않은 적이 있어(2026-11-20 실측) 로컬 기본값은 Claude CLI로 둔다.
+    if (!isDeployed) return { provider: "claude-cli", model: "claude-opus-5-5" };
     if (hasKey("google")) return { provider: "google", model: "gemini-4-argon" };
     if (hasKey("anthropic")) return { provider: "anthropic", model: "claude-opus-5-5" };
     return hasKey("deepseek") ? DEEPSEEK_DEFAULT : null;

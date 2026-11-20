@@ -100,6 +100,7 @@ export async function POST(req: Request) {
         const { data, meta } = await structured({
           role: "judge",
           task: "교차 판정",
+          timeoutMs: 240_000,
           system: JUDGE_SYSTEM,
           prompt: `## 판정할 문장\n${sentenceBlock || "(사실 문장 없음. sentences는 빈 배열)"}\n\n## 가이드라인 강조 내용\n${
             emphasis.length ? emphasis.map((p, i) => `${i}. ${p}`).join("\n") : "(없음. emphasis는 빈 배열)"
