@@ -1,0 +1,4 @@
+[
+  { "id": "intro", "title": "가온콜 회사소개서", "sourceFile": "gaon-intro.pdf", "kind": "pdf", "pages": 2 },
+  { "id": "web-case", "title": "가온콜 설치 사례", "sourceFile": "case.html", "sourceUrl": "https://example.com/case", "kind": "web", "pages": 1 }
+]

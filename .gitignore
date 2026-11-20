@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# 모델 호출·URL 캐시, 업로드(로컬 전용)
+/.cache/
+/uploads/

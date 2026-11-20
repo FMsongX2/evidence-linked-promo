@@ -1,0 +1,8 @@
+{
+  "requiredKeywords": ["통화녹음", "고객관리"],
+  "emphasisPoints": ["사무실 전화와 휴대폰 통화를 한 곳에서 관리한다는 점을 강조해 주세요."],
+  "links": [{ "label": "홈페이지", "url": "www.example.com" }],
+  "contact": ["상담 문의 : 1588-0000"],
+  "notes": [],
+  "source": { "file": "가상 자료", "sheet": "-", "cells": "-" }
+}
