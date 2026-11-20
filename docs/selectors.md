@@ -36,3 +36,15 @@
 | `rewrite-all-paste` | 원고 검수 | 경고 문장만 제안대로 고치고 다시 검수 |
 
 주소: `/?step=check` 는 자료와 가이드라인을 불러온 뒤 원고 검수 칸(17개 항목 목록)으로 바로 연다. 첫 화면은 실제 실행 모드다(예시 보기는 `load-example` 버튼으로만 들어간다).
+
+## 추가 요소
+
+| data-testid | 위치 | 동작 |
+|---|---|---|
+| `photo-link` | 사진 판독 결과의 연결 카드 한 줄 | `data-decision`: `pending` / `confirmed` / `auto`(자동 확정) / `rejected` |
+| `link-confirm` / `link-reject` | 연결 카드 줄 | 연결 확정 / 연결 해제(확정한 연결만 초안에 쓴다) |
+| `no-evidence-chip` | 문장 옆 | 회색 "근거 없음" |
+| `review-list` / `review-item` | 점검 결과 | "확인 필요"(모델만 지적, 코드 대조로 확인 안 됨) |
+| `run-summary` | 화면 맨 아래 | 실제 호출한 모델 식별자·호출 수·토큰, 자료 처리 안내 |
+| `board-export` / `board-import` | 실행 요약 | 카드 보드 내려받기(JSON) / 불러오기(숨겨진 파일 입력) |
+| `clear-local-data` | 실행 요약(로컬) | 이 기기의 캐시와 실행 기록 모두 지우기 |

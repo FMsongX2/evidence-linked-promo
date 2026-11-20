@@ -33,13 +33,22 @@ bun test   # 코드 판정 시험(인용 대조·수치·단정 표현·가이�
 
 공급자는 `src/lib/llm.ts` 한 곳에서 정한다. 환경 변수 `LLM_MAIN`, `LLM_VISION`, `LLM_JUDGE`(형식 `<공급자>:<모델>`)로 바꿀 수 있다.
 
-| 기능 | 기획서에 적은 모델 | 실제로 쓴 모델(로컬) | 배포 기본값 |
-|---|---|---|---|
-| 차별점 카드 추출, 초안 생성, 원고 문장 근거 연결, 경고 문장 다시 쓰기 | Claude Opus 5.5 | DeepSeek V4.1 Flash(`deepseek-ai/deepseek-v4.1-flash-1017`, Hive OpenAI 호환 API, Vercel AI SDK) | 같음 |
-| 사진 판독 | Claude Opus 5.5 | DeepSeek V4.1 Flash(이미지 입력) | 같음 |
-| 교차 판정(주장-인용 일치, 강조 내용) | Gemini 4 Argon | Gemini 4 Argon High(로컬 `agy` CLI) | 다른 회사 키가 없으면 DeepSeek **같은 공급자의 별도 호출**로 판정하고 화면에 그렇게 표시 |
+화면 맨 아래 "실제로 호출한 모델"에 실행 중 호출한 `<공급자>:<모델 ID>`를 그대로 보인다. 아래 식별자는 2026-11-20 실제 호출에 쓴 값이다.
 
-Gemini·Claude API 키는 쓰지 않았다. 로컬 CLI 공급자(`claude-cli`, `agy-cli`)는 개발 기기 전용이며 배포 환경(`VERCEL` 설정 시)에서는 선택되지 않는다. 모델 호출 결과는 입력 해시로 `.cache/llm/`에 캐시하고 화면에 "캐시"로 표시한다(배포 환경에서는 끔, `LLM_CACHE=off`로도 끔).
+| 기능 | 기획서에 적은 모델 | 실제로 쓴 모델 식별자(로컬) | 배포 기본값 |
+|---|---|---|---|
+| 차별점 카드 추출, 초안 생성, 원고 문장 근거 연결, 경고 문장 다시 쓰기 | Claude Opus 5.5 | `deepseek:deepseek-ai/deepseek-v4.1-flash-1017`(Hive OpenAI 호환 API `https://api-cdn.thehive.ai/api/v3`, Vercel AI SDK) | 같음 |
+| 사진 판독 | Claude Opus 5.5 | `deepseek:deepseek-ai/deepseek-v4.1-flash-1017`(이미지 입력) | 같음 |
+| 교차 판정(주장-인용 일치, 강조 내용) | Gemini 4 Argon | `claude-cli:claude-opus-5-5`(로컬 Claude Code CLI) | 다른 회사 키가 없으면 DeepSeek **같은 공급자의 별도 호출**로 판정하고 화면에 그렇게 표시 |
+
+Gemini·Claude API 키는 쓰지 않았다. 교차 판정은 처음에 로컬 `agy` CLI(Gemini 4 Argon High)로 했으나 긴 판정 요청이 10분 넘게 응답하지 않아 로컬 Claude CLI로 바꿨다. 로컬 CLI 공급자(`claude-cli`, `agy-cli`)는 개발 기기 전용이며 배포 환경(`VERCEL` 설정 시)에서는 선택되지 않는다. 모델 호출 결과는 입력 해시로 `.cache/llm/`에 캐시하고 화면에 "캐시"로 표시한다(배포 환경에서는 끔, `LLM_CACHE=off`로도 끔). 실행 기록에는 호출 수와 공급자가 돌려준 토큰 수를 남긴다(비용은 계산하지 않는다).
+
+## 자료 처리
+
+- 올린 PDF·사진·원고는 앱 서버를 거쳐 위 모델 공급자 API로 보낸다. 홈페이지 주소는 Jina Reader(`r.jina.ai`)로 본문을 받는다.
+- 서버는 올린 PDF·사진 파일을 디스크에 저장하지 않는다.
+- 로컬 실행은 모델 응답(`.cache/llm`), 홈페이지 본문(`.cache/url`), 실행 기록(`.cache/runs`)을 기기에 남기고, 화면의 "이 기기의 캐시와 실행 기록 모두 지우기"로 지운다. 배포 환경은 이것들을 남기지 않는다.
+- 카드 보드 내보내기 파일에는 카드의 짧은 인용·문서명·쪽과 가이드라인만 들어간다. 외부 리뷰 작성자는 이 파일을 불러와 원본 PDF 없이 원고를 검수한다.
 
 ## 배포(Vercel)
 
