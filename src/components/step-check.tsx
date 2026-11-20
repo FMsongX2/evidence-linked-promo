@@ -363,7 +363,7 @@ function PasteCheck({ w }: { w: W }) {
         <>
           <div className="space-y-3">
             <p data-testid="paste-run-status" className="text-sm font-medium text-success">
-              검수 {w.pasteRun}회차 완료 · {new Date(pr.checkedAt).toLocaleTimeString("ko-KR")} · 점검 {formatMs(pr.elapsedMs)}
+              검수 {w.pasteRun ? `${w.pasteRun}회차 ` : ""}완료 · {new Date(pr.checkedAt).toLocaleTimeString("ko-KR")} · 점검 {formatMs(pr.elapsedMs)}
             </p>
             <ResultSummary r={pr} />
           </div>

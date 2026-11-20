@@ -1,9 +1,13 @@
 import { Workbench } from "@/components/workbench";
+import { PUBLIC_DEMO_NOTE } from "@/components/model";
+import { providerSummary } from "@/lib/llm";
 
 const REPO_URL = "https://github.com/FMsongX2/evidence-linked-promo";
 const VIDEO_URL = "https://www.youtube.com/watch?v=uVVEGTupDpo";
 
 export default function Page() {
+  // 서버에 모델 키가 없으면(공개 데모) 직접 실행을 약속하지 않는다.
+  const noModel = !providerSummary().main;
   return (
     <Workbench>
       {/* 서버에서 렌더링되는 제품 소개. 자바스크립트 없이 첫 HTML만 읽어도 무엇을 하는 앱인지 알 수 있게 한다. */}
@@ -14,8 +18,8 @@ export default function Page() {
           수치 충돌, 가이드라인 누락을 게시 전에 경고하는 웹 앱입니다. 사람은 경고를 보고 승인한 뒤 복사합니다.
         </p>
         <p>
-          처음 오셨다면 머리글의 &ldquo;티링크 예시로 보기&rdquo;를 눌러 로컬에서 티링크 자료로 실제 실행해 저장한 결과를 보세요. 4단계의 &ldquo;외부 리뷰 원고 검수&rdquo; 탭에서 원고 검수를 직접 다시
-          돌려 볼 수 있습니다.
+          처음 오셨다면 머리글의 &ldquo;티링크 예시로 보기&rdquo;를 눌러 로컬에서 티링크 자료로 실제 실행해 저장한 결과를 보세요.{" "}
+          {noModel ? PUBLIC_DEMO_NOTE : <>4단계의 &ldquo;외부 리뷰 원고 검수&rdquo; 탭에서 원고 검수를 직접 다시 돌려 볼 수 있습니다.</>}
         </p>
         <p>
           측정 결과(로컬 측정 구성: 생성 deepseek-ai/deepseek-v4.1-flash-1017, 판정 claude-opus-5-5): 실제 사양을 고쳐 만든 고정 문장 10개 중 10개 경고, 바르게 쓴 짝 문장 10개 오경고 0개, 문장

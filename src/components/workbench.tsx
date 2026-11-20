@@ -9,7 +9,7 @@ import type { Card, Conflict, Generation, Guideline, LlmMeta, PhotoReading, Sent
 import { blogScope, flattenGeneration, replaceSentence } from "@/lib/sentences";
 import { cardStatus, reverifyCard } from "@/lib/verify";
 import { cn } from "@/lib/utils";
-import { formatMs, postJson, type Brand, type CheckResult, type ExampleSnapshot, type Photo, type Providers } from "./model";
+import { formatMs, postJson, PUBLIC_DEMO_NOTE, type Brand, type CheckResult, type ExampleSnapshot, type Photo, type Providers } from "./model";
 import { StepSources } from "./step-sources";
 import { StepPhotos } from "./step-photos";
 import { StepContent } from "./step-content";
@@ -137,9 +137,13 @@ export function useWorkbench() {
   }
 
   const live = mode === "live";
+  /** 서버에 모델 키가 없어 직접 실행이 불가능한 배포(공개 데모)인지 */
+  const noModel = Boolean(config && !config.providers.main);
   /** 모델 호출이 가능한지와 불가능한 이유 */
   const modelBlock: string | null = !live
-    ? "미리 계산한 예시 결과를 보는 중입니다. '처음부터 직접 실행'을 누르면 직접 실행할 수 있습니다."
+    ? noModel
+      ? PUBLIC_DEMO_NOTE
+      : "미리 계산한 예시 결과를 보는 중입니다. '처음부터 직접 실행'을 누르면 직접 실행할 수 있습니다."
     : !config
       ? "서버 설정을 불러오는 중입니다."
       : config.providers.main
@@ -686,6 +690,7 @@ export function useWorkbench() {
     config,
     mode,
     live,
+    noModel,
     exampleSavedAt,
     exampleProviders,
     company,
@@ -941,15 +946,19 @@ function StatusStrip({ w }: { w: W }) {
       {w.mode === "example" && (
         <div data-testid="example-banner" className={cn(strip, "border-warning-border bg-warning-soft text-warning")}>
           미리 계산한 예시 결과입니다({w.exampleSavedAt ? new Date(w.exampleSavedAt).toLocaleString("ko-KR") : ""} 실제 실행 출력). 원본 문서 전문은 포함하지 않았습니다. 이 예시는 저장해 둔 실행의 결과입니다.{" "}
-          <button
-            className="font-semibold underline underline-offset-2"
-            onClick={() => {
-              w.startLive();
-              go("step-1");
-            }}
-          >
-            처음부터 직접 실행
-          </button>
+          {w.noModel ? (
+            PUBLIC_DEMO_NOTE
+          ) : (
+            <button
+              className="font-semibold underline underline-offset-2"
+              onClick={() => {
+                w.startLive();
+                go("step-1");
+              }}
+            >
+              처음부터 직접 실행
+            </button>
+          )}
         </div>
       )}
       {w.auto && (

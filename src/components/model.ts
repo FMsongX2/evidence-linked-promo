@@ -1,6 +1,9 @@
 import type { ChecklistItem, CheckItem, CheckMetrics } from "@/lib/check";
 import type { Card, Conflict, Generation, Guideline, LlmMeta, PhotoKind, PhotoReading, SourceDoc, Warning, WarningType } from "@/lib/schemas";
 
+/** 서버에 모델 키가 없는 공개 데모에서 '직접 실행' 안내 대신 보이는 문장 */
+export const PUBLIC_DEMO_NOTE = "이 공개 데모는 미리 계산한 실제 실행 결과만 보여 줍니다. 직접 실행은 저장소의 실행 방법으로 로컬에서 할 수 있습니다.";
+
 export type Photo = {
   id: string;
   name: string;

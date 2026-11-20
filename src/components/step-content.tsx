@@ -140,7 +140,7 @@ export function StepContent({ w }: { w: W }) {
               {g.blog.sections.map((sec, i) => (
                 <div key={i}>
                   <h4 className="mb-2 text-lg font-semibold">
-                    {i + 1}. {sec.heading}
+                    {/^\s*\d+[.)]\s/.test(sec.heading) ? sec.heading : `${i + 1}. ${sec.heading}`}
                   </h4>
                   <p>
                     {sec.sentences.map((s, j) => (
