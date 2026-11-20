@@ -57,6 +57,15 @@ export type AutoState = {
   actionsDuring: number | null;
 };
 
+export type LinkDecision = "confirmed" | "auto" | "rejected";
+
+/** 확정(사람 또는 자동)한 연결만 남기고, 확정 연결이 없는 사진은 뺀다. */
+export function confirmedReadings(readings: PhotoReading[], decisions: Record<string, LinkDecision>): PhotoReading[] {
+  return readings
+    .map((r) => ({ ...r, links: r.links.filter((l) => ["confirmed", "auto"].includes(decisions[`${r.photoId}:${l.cardId}`] ?? "")) }))
+    .filter((r) => r.links.length > 0);
+}
+
 function normUrl(u?: string) {
   return (u ?? "").toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, "");
 }
@@ -84,6 +93,10 @@ export function useWorkbench() {
   const [paste, setPaste] = useState("");
   const [pasteResult, setPasteResult] = useState<CheckResult | null>(null);
   const [pasteRun, setPasteRun] = useState(0);
+  /** 사진-카드 연결의 사람 확정. 키는 "P1:C2" */
+  const [linkDecisions, setLinkDecisions] = useState<Record<string, LinkDecision>>({});
+  const [boardImported, setBoardImported] = useState<string | null>(null);
+  const [localFiles, setLocalFiles] = useState<Record<string, number> | null>(null);
   const [metas, setMetas] = useState<LlmMeta[]>([]);
   const [photoStartAt, setPhotoStartAt] = useState<number | null>(null);
   const [photoToDraftMs, setPhotoToDraftMs] = useState<number | null>(null);
@@ -316,6 +329,7 @@ export function useWorkbench() {
       photos: ready.map((p) => ({ id: p.id, dataUrl: p.src })),
     });
     setReadings(r.readings);
+    setLinkDecisions({});
     setMetas((m) => [...m, r.meta]);
     return r.readings;
   }
@@ -359,7 +373,7 @@ export function useWorkbench() {
   }
 
   async function generate() {
-    await runJob("generate", () => doGenerate(cards.filter((c) => selected.includes(c.id)), readings, conflicts));
+    await runJob("generate", () => doGenerate(cards.filter((c) => selected.includes(c.id)), confirmedReadings(readings, linkDecisions), conflicts));
   }
 
   async function runCheck(gen: Generation | null = generation) {
@@ -390,10 +404,13 @@ export function useWorkbench() {
       const { cards: newCards, conflicts: newConflicts } = await timed("cards", "cards", () => fetchCards(docs, company));
       const passing = newCards.filter((c) => c.status !== "unverified");
       const newReadings = photos.length > 0 ? await timed("photos", "photos", () => doReadPhotos(passing, photos)) : [];
+      // 자동 실행은 판독한 연결을 모두 '자동 확정'으로 표시하고 그 연결만 생성에 쓴다.
+      const autoDecisions: Record<string, LinkDecision> = Object.fromEntries(newReadings.flatMap((r) => r.links.map((l) => [`${r.photoId}:${l.cardId}`, "auto" as const])));
+      setLinkDecisions(autoDecisions);
       const linkedIds = new Set(newReadings.flatMap((r) => r.links.map((l) => l.cardId)));
       const ordered = [...passing.filter((c) => linkedIds.has(c.id)), ...passing.filter((c) => !linkedIds.has(c.id))];
       setSelected(ordered.map((c) => c.id));
-      const gen = await timed("generate", "generate", () => doGenerate(ordered, newReadings, newConflicts));
+      const gen = await timed("generate", "generate", () => doGenerate(ordered, confirmedReadings(newReadings, autoDecisions), newConflicts));
       const result = await timed("check", "check", () => doCheck(gen, newCards, newConflicts, newReadings));
       const totalMs = Date.now() - started;
       setAuto((a) => (a ? { ...a, running: false, stage: "done", totalMs, actionsDuring: userActionsRef.current - actionsAtStart } : a));
@@ -529,6 +546,53 @@ export function useWorkbench() {
     setPendingLog({ kind, r, autoInfo });
   }
 
+  /* ---------- 카드 보드 내보내기·불러오기 ---------- */
+
+  /** 카드(짧은 인용·문서명·쪽)와 가이드라인만 담은 파일. 원본 문서 전체는 넣지 않는다. */
+  function exportBoard() {
+    const board = {
+      kind: "geunger-card-board",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      company,
+      docs: docs.map((d) => ({ id: d.id, title: d.title, kind: d.kind, url: d.url })),
+      cards,
+      conflicts,
+      guideline,
+    };
+    const blob = new Blob([JSON.stringify(board, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `card-board-${(company || "board").replace(/\s+/g, "-")}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  async function importBoard(file: File) {
+    await runJob("load", async () => {
+      const board = JSON.parse(await file.text());
+      if (board?.kind !== "geunger-card-board" || !Array.isArray(board.cards)) throw new Error("카드 보드 파일이 아닙니다.");
+      startLive();
+      setCompany(board.company ?? "");
+      setDocs((board.docs ?? []).map((d: SourceDoc) => ({ ...d, pages: [] })));
+      setGuideline(board.guideline ?? null);
+      setCards(board.cards);
+      setConflicts(board.conflicts ?? []);
+      setSelected(board.cards.filter((c: Card) => c.status !== "unverified").map((c: Card) => c.id));
+      setBoardImported(file.name);
+    });
+  }
+
+  async function refreshLocalFiles() {
+    const r = await fetch("/api/local-data").then((x) => x.json());
+    setLocalFiles(r.stored ? r.files : null);
+  }
+
+  async function clearLocalData() {
+    await fetch("/api/local-data", { method: "DELETE" });
+    await refreshLocalFiles();
+  }
+
   function downloadRunLog() {
     const log = lastLog.current;
     if (!log) return;
@@ -649,6 +713,15 @@ export function useWorkbench() {
     auto,
     pdfProgress,
     pasteRun,
+    linkDecisions,
+    decideLink: tap((photoId: string, cardId: string, d: LinkDecision | null) =>
+      setLinkDecisions((prev) => {
+        const next = { ...prev };
+        if (d) next[`${photoId}:${cardId}`] = d;
+        else delete next[`${photoId}:${cardId}`];
+        return next;
+      }),
+    ),
     userActions,
     modelBlock,
     visionBlock,
@@ -674,6 +747,12 @@ export function useWorkbench() {
     applySuggestions: tap((key?: string) => applySuggestions(key)),
     autoRun: tap(autoRun),
     downloadRunLog,
+    exportBoard,
+    importBoard: tap(importBoard),
+    boardImported,
+    clearLocalData: tap(clearLocalData),
+    localFiles,
+    refreshLocalFiles,
     saveExample,
     loadExample: tap(loadExample),
     startLive: tap(startLive),
@@ -795,8 +874,101 @@ export function Workbench() {
         <StepPhotos w={w} />
         <StepContent w={w} />
         <StepCheck w={w} />
+        <RunSummary w={w} />
       </main>
     </div>
+  );
+}
+
+/** 실행 요약: 실제 호출한 모델 식별자, 호출 수·토큰, 자료 처리 안내, 카드 보드 내보내기. */
+function RunSummary({ w }: { w: W }) {
+  const { refreshLocalFiles, config } = w;
+  useEffect(() => {
+    if (config && !config.deployed) void refreshLocalFiles();
+    // 설정을 받은 뒤 한 번 읽는다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config]);
+  const calls = w.metas.filter((m) => !m.cached);
+  const byModel = new Map<string, { tasks: Set<string>; calls: number; cached: number }>();
+  for (const m of w.metas) {
+    const k = `${m.provider}:${m.model}`;
+    const e = byModel.get(k) ?? { tasks: new Set<string>(), calls: 0, cached: 0 };
+    e.tasks.add(m.role.replace(/ \d+\/\d+$/, ""));
+    if (m.cached) e.cached++;
+    else e.calls++;
+    byModel.set(k, e);
+  }
+  const usage = calls.reduce(
+    (a, m) => ({ input: a.input + (m.usage?.inputTokens ?? 0), output: a.output + (m.usage?.outputTokens ?? 0), known: a.known + (m.usage ? 1 : 0) }),
+    { input: 0, output: 0, known: 0 },
+  );
+  const deployed = config?.deployed;
+  return (
+    <section data-testid="run-summary" className="grid gap-4 rounded-2xl border bg-white p-6 text-[0.95rem] lg:grid-cols-3">
+      <div>
+        <h2 className="mb-2 text-lg font-bold">실제로 호출한 모델</h2>
+        {byModel.size === 0 ? (
+          <p className="text-muted-foreground">아직 호출이 없습니다.</p>
+        ) : (
+          <ul className="space-y-1">
+            {[...byModel.entries()].map(([k, e]) => (
+              <li key={k}>
+                <code className="rounded bg-slate-100 px-1 text-sm">{k}</code> — {[...e.tasks].join(", ")} · 호출 {e.calls}회{e.cached ? `, 캐시 ${e.cached}회` : ""}
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="mt-2 text-sm text-muted-foreground">
+          모델 호출 {calls.length}회
+          {usage.known > 0 ? ` · 토큰 입력 ${usage.input.toLocaleString()} / 출력 ${usage.output.toLocaleString()}(공급자 보고값, ${usage.known}회분)` : ""}
+        </p>
+      </div>
+      <div>
+        <h2 className="mb-2 text-lg font-bold">자료 처리</h2>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>올린 PDF·사진·원고는 이 앱의 서버를 거쳐 위의 모델 공급자 API로 보냅니다. 홈페이지 주소는 Jina Reader(r.jina.ai)로 본문을 받습니다.</li>
+          <li>서버는 올린 PDF·사진 파일을 디스크에 저장하지 않습니다.</li>
+          {deployed ? (
+            <li>이 배포 환경은 모델 응답 캐시와 실행 기록을 서버에 남기지 않습니다.</li>
+          ) : (
+            <li>
+              로컬 실행에서는 모델 응답(.cache/llm), 홈페이지 본문(.cache/url), 실행 기록(.cache/runs)을 이 기기에 남깁니다
+              {w.localFiles ? `(현재 ${w.localFiles.llm ?? 0}·${w.localFiles.url ?? 0}·${w.localFiles.runs ?? 0}개 파일)` : ""}.
+            </li>
+          )}
+          <li>얼굴·연락처·고객사 이름이 보이는 사진은 올리기 전에 확인하세요. 앱은 경고만 하고 가리지 않습니다.</li>
+        </ul>
+        {!deployed && (
+          <Button data-testid="clear-local-data" size="sm" variant="outline" className="mt-2" onClick={w.clearLocalData}>
+            이 기기의 캐시와 실행 기록 모두 지우기
+          </Button>
+        )}
+      </div>
+      <div>
+        <h2 className="mb-2 text-lg font-bold">카드 보드 전달</h2>
+        <p>외부 리뷰 작성자에게 카드 보드 파일을 보내면, 원본 PDF 없이 그 파일을 불러와 자기 원고를 검수할 수 있습니다. 파일에는 카드의 짧은 인용·문서명·쪽과 가이드라인만 들어갑니다.</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <Button data-testid="board-export" size="sm" variant="outline" onClick={w.exportBoard} disabled={w.cards.length === 0}>
+            카드 보드 내려받기(JSON)
+          </Button>
+          <label className="inline-flex cursor-pointer items-center rounded-lg border px-2.5 py-1 text-sm font-medium hover:bg-muted">
+            카드 보드 불러오기
+            <input
+              data-testid="board-import"
+              type="file"
+              accept="application/json"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void w.importBoard(f).then(() => document.getElementById("paste-check")?.scrollIntoView({ block: "start" }));
+                e.target.value = "";
+              }}
+            />
+          </label>
+        </div>
+        {w.boardImported && <p className="mt-2 text-sm font-semibold text-emerald-800">{w.boardImported}에서 카드 {w.cards.length}장을 불러왔습니다. 아래 원고 검수에 바로 쓸 수 있습니다.</p>}
+      </div>
+    </section>
   );
 }
 

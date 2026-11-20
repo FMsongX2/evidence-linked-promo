@@ -147,15 +147,33 @@ export function StepPhotos({ w }: { w: W }) {
                     {r.links.length === 0 && <p className="text-sm text-red-700">연결된 카드가 없습니다.</p>}
                     {r.links.map((l, i) => {
                       const c = w.cards.find((x) => x.id === l.cardId);
+                      const d = w.linkDecisions[`${r.photoId}:${l.cardId}`];
                       return (
-                        <p key={i} className="text-sm">
-                          <span className="mr-1 rounded border border-blue-300 bg-blue-50 px-1.5 font-semibold text-blue-800">
-                            {l.cardId} {c?.name}
-                          </span>
-                          {l.reason}
-                        </p>
+                        <div key={i} data-testid="photo-link" data-decision={d ?? "pending"} className={cn("flex items-start gap-2 text-sm", d === "rejected" && "opacity-50 line-through")}>
+                          <p className="flex-1">
+                            <span className="mr-1 rounded border border-blue-300 bg-blue-50 px-1.5 font-semibold text-blue-800">
+                              {l.cardId} {c?.name}
+                            </span>
+                            {l.reason}
+                          </p>
+                          {d === "auto" && <span className="shrink-0 rounded bg-blue-100 px-1.5 text-xs font-semibold text-blue-800">자동 확정</span>}
+                          {d === "confirmed" && <span className="shrink-0 rounded bg-emerald-100 px-1.5 text-xs font-semibold text-emerald-800">확정</span>}
+                          {w.live && d !== "confirmed" && (
+                            <Button data-testid="link-confirm" size="xs" variant="outline" onClick={() => w.decideLink(r.photoId, l.cardId, "confirmed")}>
+                              연결 확정
+                            </Button>
+                          )}
+                          {w.live && d !== "rejected" && (
+                            <Button data-testid="link-reject" size="xs" variant="ghost" onClick={() => w.decideLink(r.photoId, l.cardId, "rejected")}>
+                              연결 해제
+                            </Button>
+                          )}
+                        </div>
                       );
                     })}
+                    {r.links.length > 0 && !r.links.some((l) => ["confirmed", "auto"].includes(w.linkDecisions[`${r.photoId}:${l.cardId}`] ?? "")) && (
+                      <p className="text-xs text-muted-foreground">확정한 연결이 없는 사진은 초안에 쓰지 않습니다.</p>
+                    )}
                   </div>
                   {r.exposure.length > 0 && (
                     <div className={cn("flex items-start gap-2 rounded-lg border p-2 text-sm", acked.includes(r.photoId) ? "border-slate-300 bg-slate-50 text-slate-700" : "border-red-300 bg-red-50 text-red-900")}>

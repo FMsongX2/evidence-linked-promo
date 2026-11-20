@@ -29,6 +29,8 @@ export type CheckResult = {
   verdicts: { key: string; verdict: string; reason: string }[];
   /** 코드와 모델 중 한쪽만 경고한 문장. 하나라도 경고하면 경고로 띄운다 */
   disagreements: { key: string; code: boolean; model: boolean; reason: string }[];
+  /** 모델만 지적했고 코드 대조로 확인되지 않아 '확인 필요'로 낮춘 판정 */
+  reviews?: { key: string; verdict: string; sentencePart: string; reason: string; why: string }[];
   /** 서버에서 점검에 걸린 시간 */
   elapsedMs: number;
   checkedAt: number;

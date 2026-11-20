@@ -113,6 +113,30 @@ function Checklist({ list, items, pending = false }: { list: ChecklistItem[]; it
   );
 }
 
+/** 모델만 지적했고 코드 대조로 확인되지 않은 판정. 경고로 세지 않고 사람이 확인할 항목으로 보인다. */
+function ReviewList({ w, r }: { w: W; r: CheckResult }) {
+  if (!r.reviews?.length) return null;
+  return (
+    <div data-testid="review-list" className="rounded-xl border border-amber-300 bg-amber-50 p-4">
+      <h4 className="mb-2 font-bold text-amber-900">확인 필요 {r.reviews.length}건 — 모델만 지적했고 코드 대조로는 확인되지 않은 문장</h4>
+      <ul className="space-y-2 text-[0.95rem]">
+        {r.reviews.map((x, i) => {
+          const item = r.items.find((it) => it.key === x.key);
+          return (
+            <li key={i} data-testid="review-item">
+              <p className="font-semibold">“{item?.text ?? x.key}”</p>
+              {item && <EvidenceChips s={item} cards={w.cards} docs={w.docs} photos={w.photos} readings={w.readings} />}
+              {x.sentencePart && <span className="block text-sm">모델이 지적한 구절: “{x.sentencePart}”</span>}
+              <span className="block text-sm text-amber-900">{x.reason}</span>
+              {x.why && <span className="block text-xs text-muted-foreground">{x.why}</span>}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 function WarningList({ w, r, onlySentence, onRewriteOne }: { w: W; r: CheckResult; onlySentence?: boolean; onRewriteOne?: (key: string) => void }) {
   const rows = r.warnings.filter((x) => (onlySentence ? x.sentenceKey : true));
   if (rows.length === 0) return <p className="rounded-lg border border-emerald-300 bg-emerald-50 p-4 font-semibold text-emerald-900">경고가 없습니다.</p>;
@@ -148,7 +172,13 @@ function WarningList({ w, r, onlySentence, onRewriteOne }: { w: W; r: CheckResul
                     {x.decider === "code" ? "코드 판정" : "모델 판정"}
                   </span>
                   {x.message}
+                  {x.sentencePart && <span className="block pl-2 text-sm">문제 구절: “{x.sentencePart}”</span>}
                   {x.detail && <span className="block pl-2 text-sm text-muted-foreground">{x.detail}</span>}
+                  {x.quote && x.source && (
+                    <span className="mt-1 block pl-2">
+                      <EvidenceDetail ev={{ docId: x.source.docId, page: x.source.page, quote: x.quote, match: "exact", score: 1 }} docs={w.docs} />
+                    </span>
+                  )}
                 </li>
               ))}
             </ul>
@@ -270,6 +300,7 @@ export function StepCheck({ w }: { w: W }) {
           </div>
           {!w.approved && <p className="-mt-2 text-right text-sm text-muted-foreground">복사는 검수 승인 뒤에 켜집니다.</p>}
           <WarningList w={w} r={r} onlySentence onRewriteOne={(k) => w.regenerateFlagged(k)} />
+          <ReviewList w={w} r={r} />
         </div>
       )}
 
@@ -317,6 +348,7 @@ export function StepCheck({ w }: { w: W }) {
               </Button>
             </div>
             <WarningList w={w} r={w.pasteResult} onlySentence onRewriteOne={(k) => w.applySuggestions(k)} />
+            <ReviewList w={w} r={w.pasteResult} />
           </div>
         )}
       </div>

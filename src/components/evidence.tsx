@@ -2,6 +2,7 @@
 
 import { FileText, ImageIcon } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import type { ItemSource } from "@/lib/check";
 import type { Card, Evidence, PhotoReading, Sentence, SourceDoc, Warning } from "@/lib/schemas";
 import { cn } from "@/lib/utils";
 import { PHOTO_KIND_LABEL, WARNING_LABEL, docLabel, type Photo } from "./model";
@@ -95,7 +96,7 @@ function PhotoChip({ id, photos, readings }: { id: string; photos: Photo[]; read
   );
 }
 
-export function EvidenceChips({ s, cards, docs, photos, readings }: { s: Sentence; cards: Card[]; docs: DocLite[]; photos: Photo[]; readings: PhotoReading[] }) {
+export function EvidenceChips({ s, cards, docs, photos, readings }: { s: Sentence & { sources?: ItemSource[] }; cards: Card[]; docs: DocLite[]; photos: Photo[]; readings: PhotoReading[] }) {
   return (
     <span className="ml-1 inline-flex flex-wrap gap-1 align-middle">
       {s.cardIds.map((id) => {
@@ -108,11 +109,22 @@ export function EvidenceChips({ s, cards, docs, photos, readings }: { s: Sentenc
           </span>
         );
       })}
+      {(s.sources ?? []).map((src, i) => (
+        <Popover key={`src-${i}`}>
+          <PopoverTrigger data-testid="evidence-chip" className="inline-flex items-center gap-1 rounded-md border border-blue-300 bg-blue-50 px-1.5 py-0.5 align-middle text-xs font-semibold text-blue-800">
+            <FileText className="size-3" />
+            {docLabel(docs, src.docId, src.page)}
+          </PopoverTrigger>
+          <PopoverContent className="w-[34rem] max-w-[90vw]">
+            <EvidenceDetail ev={{ ...src, match: "exact", score: 1 }} docs={docs} />
+          </PopoverContent>
+        </Popover>
+      ))}
       {s.photoIds.map((id) => (
         <PhotoChip key={id} id={id} photos={photos} readings={readings} />
       ))}
-      {s.kind === "fact" && s.cardIds.length + s.photoIds.length === 0 && (
-        <span className="rounded-md border border-slate-300 bg-slate-100 px-1.5 py-0.5 text-xs font-semibold text-slate-600">근거 없음</span>
+      {s.kind === "fact" && s.cardIds.length + s.photoIds.length + (s.sources?.length ?? 0) === 0 && (
+        <span data-testid="no-evidence-chip" className="rounded-md border border-slate-300 bg-slate-100 px-1.5 py-0.5 text-xs font-semibold text-slate-600">근거 없음</span>
       )}
     </span>
   );

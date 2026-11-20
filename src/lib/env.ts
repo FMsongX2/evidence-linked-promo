@@ -14,6 +14,7 @@ export const cacheEnabled = !isDeployed && process.env.LLM_CACHE !== "off";
 export const LIMITS = {
   photos: 5,
   photoBytes: 800_000,
-  pdfBytes: 4_000_000,
+  // 배포 환경은 Vercel 요청 본문 한계 아래로, 로컬은 원본 제안서·회사소개서 PDF가 들어가게 크게 둔다.
+  pdfBytes: isDeployed ? 4_000_000 : 300_000_000,
   pasteChars: 20_000,
 };
