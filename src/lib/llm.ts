@@ -132,32 +132,50 @@ export async function structured<T extends z.ZodType>(args: StructuredArgs<T>): 
   if (cached !== undefined) {
     const parsed = args.schema.safeParse(cached);
     if (parsed.success) {
-      return { data: parsed.data, meta: { role: args.task, provider: spec.provider, model: spec.model, cached: true, ms: Date.now() - started } };
+      return { data: parsed.data, meta: { role: args.task, provider: spec.provider, model: spec.model, cached: true, ms: Date.now() - started, usage: null, attempts: 0 } };
     }
   }
 
   if (isDeployed) consumeDailyQuota();
   const timeoutMs = args.timeoutMs ?? 600_000;
-  // 구조화 출력이 스키마와 맞지 않으면 한 번 더 요청한다.
+  // 구조화 출력이 스키마와 맞지 않거나 호출이 실패하면 MAX_ATTEMPTS번까지 요청한다. 토큰은 모든 시도를 더한다.
   let lastError = "";
-  for (let attempt = 1; attempt <= 2; attempt++) {
-    let raw: unknown;
+  const usage: Usage = { inputTokens: null, outputTokens: null };
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    let res: CallResult;
     try {
-      if (spec.provider === "claude-cli") raw = await callClaudeCli(spec.model, args, jsonSchema, timeoutMs);
-      else if (spec.provider === "agy-cli") raw = await callAgyCli(spec.model, args, jsonSchema, timeoutMs);
-      else raw = await callSdk(spec, args, timeoutMs);
+      if (spec.provider === "claude-cli") res = await callClaudeCli(spec.model, args, jsonSchema, timeoutMs);
+      else if (spec.provider === "agy-cli") res = await callAgyCli(spec.model, args, jsonSchema, timeoutMs);
+      else res = await callSdk(spec, args, timeoutMs);
     } catch (e) {
       lastError = e instanceof Error ? e.message : String(e);
       continue;
     }
-    const parsed = args.schema.safeParse(raw);
+    addUsage(usage, res.usage);
+    const parsed = args.schema.safeParse(res.raw);
     if (parsed.success) {
       await writeCache(key, parsed.data);
-      return { data: parsed.data, meta: { role: args.task, provider: spec.provider, model: spec.model, cached: false, ms: Date.now() - started } };
+      return { data: parsed.data, meta: { role: args.task, provider: spec.provider, model: spec.model, cached: false, ms: Date.now() - started, usage, attempts: attempt } };
     }
     lastError = `모델 출력이 스키마와 맞지 않습니다. ${parsed.error.issues.slice(0, 3).map((i) => `${i.path.join(".")} ${i.message}`).join("; ")}`;
   }
-  throw new Error(`${args.task}: ${lastError}`);
+  throw new Error(`${args.task}: ${lastError} (${MAX_ATTEMPTS}회 시도)`);
+}
+
+/** 한 작업의 모델 호출 시도 상한(첫 호출 포함). */
+export const MAX_ATTEMPTS = 2;
+
+type Usage = NonNullable<LlmMeta["usage"]>;
+type CallResult = { raw: unknown; usage: Usage | null };
+
+function addUsage(total: Usage, u: Usage | null) {
+  if (!u) return;
+  if (u.inputTokens !== null) total.inputTokens = (total.inputTokens ?? 0) + u.inputTokens;
+  if (u.outputTokens !== null) total.outputTokens = (total.outputTokens ?? 0) + u.outputTokens;
+}
+
+function num(x: unknown): number | null {
+  return typeof x === "number" && Number.isFinite(x) ? x : null;
 }
 
 /** 배포 환경의 하루 모델 호출 상한(서버 인스턴스 메모리 기준). 공개 주소에서 키가 소진되지 않게 한다. */
@@ -176,7 +194,7 @@ function consumeDailyQuota() {
 
 /* ---------- Vercel AI SDK 공급자 ---------- */
 
-async function callSdk<T extends z.ZodType>(spec: ModelSpec, args: StructuredArgs<T>, timeoutMs: number): Promise<unknown> {
+async function callSdk<T extends z.ZodType>(spec: ModelSpec, args: StructuredArgs<T>, timeoutMs: number): Promise<CallResult> {
   const model =
     spec.provider === "deepseek"
       ? createOpenAICompatible({
@@ -197,14 +215,14 @@ async function callSdk<T extends z.ZodType>(spec: ModelSpec, args: StructuredArg
       ],
     },
   ];
-  const { output } = await generateText({
+  const { output, usage } = await generateText({
     model,
     system: args.system,
     messages,
     output: Output.object({ schema: args.schema }),
     abortSignal: AbortSignal.timeout(timeoutMs),
   });
-  return output;
+  return { raw: output, usage: { inputTokens: num(usage?.inputTokens), outputTokens: num(usage?.outputTokens) } };
 }
 
 /* ---------- 로컬 CLI 공급자 ---------- */
@@ -233,7 +251,7 @@ function run(cmd: string, argv: string[], opts: { cwd: string; stdin?: string; t
   return promise;
 }
 
-async function callClaudeCli<T extends z.ZodType>(model: string, args: StructuredArgs<T>, jsonSchema: unknown, timeoutMs: number): Promise<unknown> {
+async function callClaudeCli<T extends z.ZodType>(model: string, args: StructuredArgs<T>, jsonSchema: unknown, timeoutMs: number): Promise<CallResult> {
   const wd = await fs.mkdtemp(path.join(os.tmpdir(), "geunger-claude-"));
   try {
     const env = { ...process.env };
@@ -283,13 +301,19 @@ async function callClaudeCli<T extends z.ZodType>(model: string, args: Structure
     if (last.is_error) throw new Error(`claude 오류: ${String(last.result).slice(0, 300)}`);
     const used = Object.keys(last.modelUsage ?? {});
     if (used.length && !used.some((u) => u.startsWith(model))) throw new Error(`claude가 다른 모델로 응답했습니다: ${used.join(", ")}`);
-    return last.structured_output ?? JSON.parse(last.result);
+    // 입력 토큰은 캐시 생성·캐시 읽기 토큰까지 더한 값(실제로 모델이 읽은 프롬프트 토큰)이다.
+    const u = last.usage ?? {};
+    const input = [u.input_tokens, u.cache_creation_input_tokens, u.cache_read_input_tokens].map(num);
+    return {
+      raw: last.structured_output ?? JSON.parse(last.result),
+      usage: { inputTokens: input.every((x) => x === null) ? null : input.reduce<number>((a, b) => a + (b ?? 0), 0), outputTokens: num(u.output_tokens) },
+    };
   } finally {
     await fs.rm(wd, { recursive: true, force: true });
   }
 }
 
-async function callAgyCli<T extends z.ZodType>(model: string, args: StructuredArgs<T>, jsonSchema: unknown, timeoutMs: number): Promise<unknown> {
+async function callAgyCli<T extends z.ZodType>(model: string, args: StructuredArgs<T>, jsonSchema: unknown, timeoutMs: number): Promise<CallResult> {
   const wd = await fs.mkdtemp(path.join(os.tmpdir(), "geunger-agy-"));
   try {
     const schemaPath = path.join(wd, "_schema.json");
@@ -312,10 +336,12 @@ async function callAgyCli<T extends z.ZodType>(model: string, args: StructuredAr
     );
     const res = JSON.parse(out);
     if (res.status && res.status !== "SUCCESS") throw new Error(`agy 상태 ${res.status}`);
-    if (res.structured_output) return res.structured_output;
+    const u = res.usage ?? res.stats ?? {};
+    const usage = { inputTokens: num(u.input_tokens ?? u.inputTokens ?? u.prompt_tokens), outputTokens: num(u.output_tokens ?? u.outputTokens ?? u.completion_tokens) };
+    if (res.structured_output) return { raw: res.structured_output, usage };
     const text = String(res.response ?? "").trim();
     if (!text) throw new Error("agy 빈 응답");
-    return JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, ""));
+    return { raw: JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, "")), usage };
   } finally {
     await fs.rm(wd, { recursive: true, force: true });
   }

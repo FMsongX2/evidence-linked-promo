@@ -113,6 +113,29 @@ describe("문장 점검(코드 판정)", () => {
   test("근거와 같은 수치는 경고 없음", () => expect(of("e")).toEqual([]));
 });
 
+describe("근거 쪽 안에서의 대조(코드 판정)", () => {
+  const { cards, conflicts } = buildCards(docs, draft);
+  const items: CheckItem[] = [
+    // 원문의 98%는 녹취 성공률이다. 다른 지표(음질 만족도)의 98%는 근거가 아니다.
+    { key: "f", text: "PC폰 통화 음질 만족도는 98%입니다.", cardIds: ["C1"], photoIds: [], kind: "fact" },
+    // 카드가 없어도 원문 인용으로 확인한 문장은 근거 없음이 아니다. 070은 번호 앞자리라 수치로 보지 않는다.
+    { key: "g", text: "PC폰 녹음 저장은 가온 070 계정에서만 지원합니다.", cardIds: [], photoIds: [], kind: "fact", sources: [{ docId: "intro", page: 2, quote: "PC폰 녹음 저장은 가온 070 계정에서만 지원합니다." }] },
+    // 원문에 조건 줄(계정에서만)이 있는 사실을 "어떤 계정이든"으로 단정
+    { key: "h", text: "PC폰 녹음 저장은 어떤 계정이든 지원합니다.", cardIds: [], photoIds: [], kind: "fact", sources: [{ docId: "intro", page: 2, quote: "PC폰 녹음 저장은 가온 070 계정에서만 지원합니다." }] },
+  ];
+  const ws = codeChecks(items, cards, conflicts, docs);
+  const of = (key: string) => ws.filter((w) => w.sentenceKey === key);
+  test("같은 숫자라도 다른 맥락이면 근거로 보지 않는다", () => {
+    expect(of("f").some((w) => w.type === "no-evidence" && w.sentencePart === "98%")).toBe(true);
+  });
+  test("원문 인용이 있으면 카드 없이도 경고 없음", () => expect(of("g")).toEqual([]));
+  test("보편 표현과 원문 조건 줄이 만나면 사양 불일치(조건 원문 인용)", () => {
+    const w = of("h").find((x) => x.type === "spec-mismatch");
+    expect(w?.quote).toContain("계정에서만");
+    expect(w?.source).toEqual({ docId: "intro", page: 2 });
+  });
+});
+
 describe("가이드라인 점검표(코드 판정)", () => {
   const body = "가온녹취로 통화녹음을 한곳에서 봅니다.\n문의 1588-0000";
   const items: CheckItem[] = body.split("\n").map((t, i) => ({ key: `p${i}`, text: t, cardIds: [], photoIds: [], kind: "fact" }));
