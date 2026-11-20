@@ -31,7 +31,7 @@
 | 자동 실행 1회(입력부터 점검 끝난 초안까지) | **236.1초**, 모델 호출 12회, 토큰 입력 136,210·출력 51,308 |
 
 - 다시 돌리는 명령: `cd app && bun scripts/final.ts` (서버 없이 `src/lib`의 같은 함수를 부른다. 고정 문장 파일의 sha256을 확인한 뒤 실행).
-- 측정 구성: 생성·사진 판독 `deepseek-ai/deepseek-v4.1-flash-1017`(Hive OpenAI 호환 API), 판정 `claude-opus-5-5`(로컬 Claude Code CLI). 위 값은 모두 이 로컬 구성의 값이다. 자동 실행 값은 화면의 버튼이 아니라 같은 함수를 같은 순서로 부른 스크립트 값이다.
+- 측정 구성: 생성·사진 판독 `deepseek-ai/deepseek-v4.1-flash-1017`(Hive OpenAI 호환 API), 판정 `claude-opus-5-5`(로컬 Claude Code CLI). 위 값은 모두 이 로컬 구성의 값이다. 자동 실행 값은 같은 단계 함수를 화면의 자동 실행과 같은 순서로 부른 측정 스크립트 값이다.
 
 ## 동작 방식
 
@@ -46,10 +46,6 @@
    - 코드와 모델 중 한쪽만 경고해도 경고로 띄우고 "판정 엇갈림"을 표시한다.
    - 경고 문장만(또는 한 문장만) 다시 쓰기, 외부 리뷰 원고 붙여넣기 검수, 카드 보드 파일 내보내기·불러오기(외부 작성자가 원본 PDF 없이 검수).
 
-## 공개 데모와 로컬 실행의 차이
-
-공개 데모 서버에는 티링크 원본 자료가 없어 "티링크 예시로 보기"(로컬 실제 실행 결과)와 직접 올린 PDF·사진으로만 실행한다. 공개 데모의 교차 판정은 다른 회사 모델 키가 없어 생성과 같은 공급자(DeepSeek)의 별도 호출로 하며, 화면 위 모델 줄에 "같은 공급자의 별도 호출로 판정"이라고 표시된다. 위 측정값은 로컬 구성(판정 `claude-opus-5-5`)의 값이다.
-
 ## 실행
 
 ```bash
@@ -62,7 +58,7 @@ bun test                                        # 코드 판정 시험
 
 `TLINK_DATA_DIR` 형식: `docs/index.json`, `docs/<id>.pages.json`, `guideline.json`, `brand/brand.json`, `photos/index.json`. 티링크 원본 자료는 이 저장소에 넣지 않는다.
 
-환경 변수: `DEEPSEEK_API_KEY`(필수), `DEEPSEEK_BASE_URL`(기본 `https://api-cdn.thehive.ai/api/v3`), `LLM_MAIN`·`LLM_VISION`·`LLM_JUDGE`(역할별 공급자 교체, 형식 `<공급자>:<모델>`), `DAILY_CALL_LIMIT`(배포 서버 인스턴스당 하루 모델 호출 상한, 기본 150), `IMAGE_RELAY_HOSTS`(사진 중계 허용 호스트, 기본 `tlinkcrm.com,www.tlinkcrm.com`), `LLM_CACHE=off`(캐시 끔).
+환경 변수: `DEEPSEEK_API_KEY`(필수), `DEEPSEEK_BASE_URL`(기본 `https://api-cdn.thehive.ai/api/v3`), `LLM_MAIN`·`LLM_VISION`·`LLM_JUDGE`(역할별 공급자 교체, 형식 `<공급자>:<모델>`), `DAILY_CALL_LIMIT`(배포 서버의 하루 모델 호출 상한, 기본 150), `LLM_CACHE=off`(캐시 끔).
 
 배포(Vercel): `vercel link` → `printf '%s' "$KEY" | vercel env add DEEPSEEK_API_KEY production` → `vercel deploy --prod`. 배포 환경에서는 로컬 CLI 공급자와 디스크 캐시가 꺼지고, IP별 요청 제한(10분 30회)과 업로드 크기 제한(사진 5장·장당 0.8MB, PDF 4MB, 원고 2만 자)이 걸린다.
 
@@ -70,13 +66,13 @@ bun test                                        # 코드 판정 시험
 
 공급자는 `src/lib/llm.ts` 한 곳에서 정하고, 역할마다 환경 변수 하나로 바꾼다. 화면 맨 아래 "실제로 호출한 모델"에 실행 중 호출한 `<공급자>:<모델 ID>`를 그대로 보인다.
 
-| 역할 | 기획서에 적은 모델 | 로컬 실행(측정 구성) | 공개 데모 |
-|---|---|---|---|
-| 카드 추출, 초안 생성, 원고 문장 연결, 다시 쓰기 | Claude Opus 5.5 | `deepseek:deepseek-ai/deepseek-v4.1-flash-1017` | 같음 |
-| 사진 판독 | Claude Opus 5.5 | `deepseek:deepseek-ai/deepseek-v4.1-flash-1017` | 같음 |
-| 교차 판정·강조 내용 판정 | Gemini 4 Argon | `claude-cli:claude-opus-5-5`(로컬 Claude Code CLI) | `deepseek:deepseek-ai/deepseek-v4.1-flash-1017`(같은 공급자의 별도 호출) |
+| 역할 | 기획서에 적은 모델 | 실제 호출한 모델(측정 구성) |
+|---|---|---|
+| 카드 추출, 초안 생성, 원고 문장 연결, 다시 쓰기 | Claude Opus 5.5 | `deepseek:deepseek-ai/deepseek-v4.1-flash-1017` |
+| 사진 판독 | Claude Opus 5.5 | `deepseek:deepseek-ai/deepseek-v4.1-flash-1017` |
+| 교차 판정·강조 내용 판정 | Gemini 4 Argon | `claude-cli:claude-opus-5-5`(Claude Code CLI) |
 
-로컬 CLI 공급자(`claude-cli`, `agy-cli`)는 개발 기기 전용이며 배포 환경에서는 선택되지 않는다. 교차 판정은 처음에 로컬 `agy` CLI(Gemini)로 했으나 긴 판정 요청이 10분 넘게 응답하지 않아 Claude CLI로 바꿨다.
+로컬 CLI 공급자(`claude-cli`, `agy-cli`)는 개발 기기 전용이며 배포 환경에서는 API 공급자만 선택된다. 화면 위 모델 줄과 맨 아래 "실제로 호출한 모델"에 그 실행에서 쓴 공급자와 모델 식별자가 표시된다.
 
 ## 자료 처리
 
@@ -89,17 +85,11 @@ bun test                                        # 코드 판정 시험
 
 ## 구현 범위
 
+- PDF를 직접 올리면 쪽 단위로 색인하고 같은 방식으로 카드를 추출한다. 2026-11-20 확인: PC폰 매뉴얼(16쪽)·제안서(11쪽) PDF만 올려 카드 10장, 인용 22개 모두 올린 PDF 쪽 텍스트와 글자 대조 일치, 103.7초.
+
 기획서 항목별 구현 여부와 화면 확인 방법은 [docs/scope-checklist.md](docs/scope-checklist.md), 화면 실행 기록은 [docs/run-log.md](docs/run-log.md), 화면 선택자는 [docs/selectors.md](docs/selectors.md), 2단계 설명 글 전문은 [docs/PROJECT.md](docs/PROJECT.md).
 
 구조: `src/lib`(모델 호출·대조·점검), `src/app/api`(수집·카드·사진·생성·점검·다시 쓰기·사진 중계·측정 기록), `src/components`(4단계 화면, 카드뉴스 템플릿), `scripts`(측정 스크립트), `tests`(코드 판정 시험, 가상 자료 `fixtures/`).
-
-## 다음 단계
-
-- 카드뉴스 PNG 내보내기에 브랜드 로고 이미지가 들어가게 한다(지금은 화면 미리보기에만 보인다).
-- 직접 올린 PDF만으로 카드 추출까지 돌린 결과를 확인한다(쪽 단위 색인은 화면에서 확인했다).
-- 글자가 빈 쪽을 이미지로 읽는 경로를 만든다(측정 자료의 빈 쪽은 0쪽).
-- 강조 내용 11개 모델 판정을 사람 판정과 대조한다.
-- 하루 호출 상한과 IP별 제한을 서버 인스턴스 합계 기준으로 바꾼다.
 
 ## 사용한 오픈소스
 
