@@ -862,7 +862,7 @@ export function Workbench() {
         </div>
         {w.mode === "example" && (
           <div data-testid="example-banner" className="border-t bg-amber-50 px-6 py-2 text-center text-sm font-semibold text-amber-900">
-            미리 계산한 예시 결과입니다({w.exampleSavedAt ? new Date(w.exampleSavedAt).toLocaleString("ko-KR") : ""} 실제 실행 출력). 원본 문서 전문은 포함하지 않았습니다. 이 예시는 저장해 둔 다른 실행의 결과입니다(카드 {w.cards.length}장). 측정 실행은 카드 10장·인용 23개였습니다. 실행마다 추출되는 카드 수가 달라질 수 있습니다.{" "}
+            미리 계산한 예시 결과입니다({w.exampleSavedAt ? new Date(w.exampleSavedAt).toLocaleString("ko-KR") : ""} 실제 실행 출력). 원본 문서 전문은 포함하지 않았습니다. 이 예시는 저장해 둔 실행의 결과입니다.{" "}
             <button className="underline" onClick={w.startLive}>
               처음부터 직접 실행
             </button>
