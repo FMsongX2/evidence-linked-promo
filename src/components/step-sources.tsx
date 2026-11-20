@@ -10,7 +10,7 @@ import type { Card } from "@/lib/schemas";
 import { cn } from "@/lib/utils";
 import { EvidenceDetail, StatusBadge } from "./evidence";
 import { docLabel } from "./model";
-import { Disclosure, EmptyState, InputPanel, MetaLine, Running, StatLine, StepHeader, StepPager, useNav } from "./step-frame";
+import { Disclosure, EmptyState, InputPanel, MetaLine, Running, StepHeader, StepPager, SummaryLine, useNav } from "./step-frame";
 import { FileButton, type W } from "./workbench";
 
 const SUGGESTED_URLS = [
@@ -223,11 +223,17 @@ export function StepSources({ w }: { w: W }) {
         desc="제품 자료 PDF와 홈페이지를 쪽 단위로 색인하고, 차별점마다 원문 인용과 문서·쪽을 붙입니다. 인용문은 서버 코드가 원문과 글자 단위로 대조합니다."
         meta={<MetaLine metas={w.metas} task="차별점 카드 추출" />}
         actions={
-          <Button data-testid="cards-run" size="lg" variant="outline" onClick={w.extractCards} disabled={Boolean(blockReason) || w.jobs.cards.running}>
+          <Button
+            data-testid="cards-run"
+            size="lg"
+            variant={!blockReason && !w.jobs.cards.running && w.cards.length === 0 ? "default" : "outline"}
+            onClick={w.extractCards}
+            disabled={Boolean(blockReason) || w.jobs.cards.running}
+          >
             <Sparkles /> 차별점 카드 뽑기
           </Button>
         }
-        blockReason={w.live ? blockReason : null}
+        blockReason={blockReason}
       />
 
       <Running job={w.jobs.cards} label="차별점 카드 추출(문서 전체를 모델이 읽습니다)" />
@@ -310,14 +316,17 @@ export function StepSources({ w }: { w: W }) {
 
       {w.cards.length > 0 && (
         <div className="space-y-4">
-          <StatLine
-            items={[
-              { label: "카드", value: `${w.cards.length}장` },
-              { label: "인용 대조 통과", value: `${verified}장`, tone: "success" },
-              { label: "근거 미확인", value: `${w.cards.filter((c) => c.status === "unverified").length}장`, tone: w.cards.some((c) => c.status === "unverified") ? "danger" : undefined },
+          <SummaryLine
+            main={[
+              { label: "인용 대조 통과", value: `${verified}장`, detail: `/ ${w.cards.length}장`, tone: verified === w.cards.length ? "success" : undefined },
+              {
+                label: "근거 미확인",
+                value: `${w.cards.filter((c) => c.status === "unverified").length}장`,
+                tone: w.cards.some((c) => c.status === "unverified") ? "danger" : undefined,
+              },
               { label: "수치 충돌", value: `${w.conflicts.length}건`, tone: w.conflicts.length ? "warning" : undefined },
-              { label: `체크한 카드 ${w.selected.length}장으로 콘텐츠를 만듭니다.` },
             ]}
+            details={[`카드 ${w.cards.length}장`, `체크한 카드 ${w.selected.length}장으로 콘텐츠를 만듭니다.`]}
           />
           <div className="grid items-start gap-4 md:grid-cols-2 2xl:grid-cols-3">
             {w.cards.map((c) => (

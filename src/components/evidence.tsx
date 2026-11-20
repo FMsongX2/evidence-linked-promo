@@ -59,16 +59,17 @@ export function EvidenceDetail({ ev, docs }: { ev: Evidence; docs: DocLite[] }) 
   );
 }
 
+/** 근거 칩. 보이는 크기는 작게 두고, 터치 화면에서는 위아래로 누를 영역을 넓혀 44px 이상이 되게 한다. */
+const CHIP =
+  "relative inline-flex items-center gap-1 rounded-md border px-1.5 py-px align-middle text-xs font-medium hover:brightness-95 pointer-coarse:after:absolute pointer-coarse:after:-inset-x-1 pointer-coarse:after:-inset-y-3";
+
 function CardChip({ card, docs }: { card: Card; docs: DocLite[] }) {
   const bad = card.status !== "confirmed";
   return (
     <Popover>
       <PopoverTrigger
         data-testid="evidence-chip"
-        className={cn(
-          "inline-flex items-center gap-1 rounded-md border px-1.5 py-px align-middle text-xs font-medium hover:brightness-95",
-          bad ? "border-warning-border bg-warning-soft text-warning" : "border-doc-border bg-doc-soft text-doc",
-        )}
+        className={cn(CHIP, bad ? "border-warning-border bg-warning-soft text-warning" : "border-doc-border bg-doc-soft text-doc")}
       >
         <FileText className="size-3" />
         {card.id} {card.evidence[0] ? docLabel(docs, card.evidence[0].docId, card.evidence[0].page) : ""}
@@ -93,7 +94,7 @@ function PhotoChip({ id, photos, readings }: { id: string; photos: Photo[]; read
   const r = readings.find((x) => x.photoId === id);
   return (
     <Popover>
-      <PopoverTrigger data-testid="photo-chip" className="inline-flex items-center gap-1 rounded-md border border-photo-border bg-photo-soft px-1.5 py-px align-middle text-xs font-medium text-photo hover:brightness-95">
+      <PopoverTrigger data-testid="photo-chip" className={cn(CHIP, "border-photo-border bg-photo-soft text-photo")}>
         <ImageIcon className="size-3" />
         사진 {id}
       </PopoverTrigger>
@@ -109,9 +110,23 @@ function PhotoChip({ id, photos, readings }: { id: string; photos: Photo[]; read
   );
 }
 
-export function EvidenceChips({ s, cards, docs, photos, readings }: { s: Sentence & { sources?: ItemSource[] }; cards: Card[]; docs: DocLite[]; photos: Photo[]; readings: PhotoReading[] }) {
+export function EvidenceChips({
+  s,
+  cards,
+  docs,
+  photos,
+  readings,
+  className,
+}: {
+  s: Sentence & { sources?: ItemSource[] };
+  cards: Card[];
+  docs: DocLite[];
+  photos: Photo[];
+  readings: PhotoReading[];
+  className?: string;
+}) {
   return (
-    <span className="ml-1 inline-flex flex-wrap gap-1 align-middle">
+    <span className={cn("ml-1 inline-flex flex-wrap gap-1 align-middle", className)}>
       {s.cardIds.map((id) => {
         const c = cards.find((x) => x.id === id);
         return c ? (
@@ -124,7 +139,7 @@ export function EvidenceChips({ s, cards, docs, photos, readings }: { s: Sentenc
       })}
       {(s.sources ?? []).map((src, i) => (
         <Popover key={`src-${i}`}>
-          <PopoverTrigger data-testid="evidence-chip" className="inline-flex items-center gap-1 rounded-md border border-doc-border bg-doc-soft px-1.5 py-px align-middle text-xs font-medium text-doc hover:brightness-95">
+          <PopoverTrigger data-testid="evidence-chip" className={cn(CHIP, "border-doc-border bg-doc-soft text-doc")}>
             <FileText className="size-3" />
             {docLabel(docs, src.docId, src.page)}
           </PopoverTrigger>

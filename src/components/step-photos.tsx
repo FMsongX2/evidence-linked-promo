@@ -53,11 +53,17 @@ export function StepPhotos({ w }: { w: W }) {
         desc="사진 1~5장(긴 변 1,600px 이하로 줄여 보냄)의 종류와 보이는 것을 읽고 관련 차별점 카드를 연결합니다. 사진에서 나온 내용은 '사진 근거'로 따로 표시합니다."
         meta={<MetaLine metas={w.metas} task="사진 판독" />}
         actions={
-          <Button data-testid="photos-run" size="lg" variant={w.readings.length === 0 ? "default" : "outline"} onClick={w.readPhotos} disabled={Boolean(blockReason) || w.jobs.photos.running}>
+          <Button
+            data-testid="photos-run"
+            size="lg"
+            variant={!blockReason && !w.jobs.photos.running && w.readings.length === 0 ? "default" : "outline"}
+            onClick={w.readPhotos}
+            disabled={Boolean(blockReason) || w.jobs.photos.running}
+          >
             <ScanEye /> 사진 판독하기
           </Button>
         }
-        blockReason={w.live ? blockReason : null}
+        blockReason={blockReason}
       />
 
       <Running job={w.jobs.photos} label="사진 판독" />

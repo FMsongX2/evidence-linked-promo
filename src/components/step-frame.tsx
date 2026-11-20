@@ -109,21 +109,40 @@ export function InputPanel({ summary, hasResults, children }: { summary: React.R
   );
 }
 
-export type Stat = { label: React.ReactNode; value?: React.ReactNode; tone?: "danger" | "warning" | "success"; testid?: string };
+export type Stat = { label: string; value: React.ReactNode; detail?: React.ReactNode; tone?: "danger" | "warning" | "success" };
 
-/** 요약 수치 한 줄. 타일 대신 구분선으로 나눈 한 줄로 둔다. */
-export function StatLine({ items, className }: { items: Stat[]; className?: string }) {
+/**
+ * 결과 요약: 판단에 필요한 수치 셋을 크게 한 줄로, 나머지는 그 아래 작은 보조 줄 하나로 묶는다.
+ * `aside`(예: 승인으로 건너뛰는 링크)는 큰 수치 줄 오른쪽 끝에 둔다.
+ */
+export function SummaryLine({ main, details, aside }: { main: Stat[]; details: React.ReactNode[]; aside?: React.ReactNode }) {
   return (
-    <dl className={cn("flex flex-wrap border-y text-sm", className)}>
-      {items.map((s, i) => (
-        <div key={i} data-testid={s.testid} className="mr-4 flex items-baseline gap-1.5 border-r py-2.5 pr-4 last:mr-0 last:border-r-0">
-          <dt className="text-muted-foreground">{s.label}</dt>
-          {s.value !== undefined && (
-            <dd className={cn("font-semibold tabular-nums", s.tone === "danger" && "text-danger", s.tone === "warning" && "text-warning", s.tone === "success" && "text-success")}>{s.value}</dd>
-          )}
-        </div>
-      ))}
-    </dl>
+    <div className="border-y py-3">
+      <div className="flex flex-wrap items-end gap-x-10 gap-y-3">
+        <dl className="contents">
+          {main.map((s) => (
+            <div key={s.label}>
+              <dt className="text-sm text-muted-foreground">{s.label}</dt>
+              <dd className={cn("text-2xl font-semibold tabular-nums", s.tone === "danger" && "text-danger", s.tone === "warning" && "text-warning", s.tone === "success" && "text-success")}>
+                {s.value}
+                {s.detail && <span className="ml-1.5 text-sm font-normal text-muted-foreground">{s.detail}</span>}
+              </dd>
+            </div>
+          ))}
+        </dl>
+        {aside && <div className="ml-auto self-center">{aside}</div>}
+      </div>
+      {details.length > 0 && (
+        <p className="mt-2 text-sm text-muted-foreground tabular-nums">
+          {details.map((d, i) => (
+            <span key={i}>
+              {i > 0 && <span aria-hidden> · </span>}
+              {d}
+            </span>
+          ))}
+        </p>
+      )}
+    </div>
   );
 }
 

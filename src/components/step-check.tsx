@@ -11,7 +11,7 @@ import { blogPlainText, caseStudyPlainText } from "@/lib/sentences";
 import { cn } from "@/lib/utils";
 import { EvidenceChips, EvidenceDetail } from "./evidence";
 import { WARNING_LABEL, formatMs, type CheckResult } from "./model";
-import { Disclosure, EmptyState, LINE_TAB, LINE_TABS, Note, Pill, Running, StatLine, StepHeader, StepPager, useNav, type Stat } from "./step-frame";
+import { Disclosure, EmptyState, LINE_TAB, LINE_TABS, Note, Pill, Running, StepHeader, StepPager, SummaryLine, useNav, type Stat } from "./step-frame";
 import type { W } from "./workbench";
 
 /** 시연 원고(stage2/measurements.md 2.5절, 번호 표시 제거). 틀린 문장 3개와 필수 키워드·문의처 누락이 들어 있다. */
@@ -31,38 +31,43 @@ PC폰만 설치하면 모든 통화가 PC에 저장됩니다.
 
 const flaggedCount = (r: CheckResult) => new Set(r.warnings.map((x) => x.sentenceKey).filter(Boolean)).size;
 
-/** 요약 줄: 경고 문장 수와 점검표 충족 수를 맨 앞에, 그다음 경고 4종과 점검 정보. 승인 구획으로 건너뛰는 링크를 끝에 둔다. */
+/** 요약: 판단에 필요한 셋(경고 문장, 점검표 충족, 근거 연결)을 크게, 나머지는 보조 줄 하나로. 승인 구획으로 건너뛰는 링크를 오른쪽 끝에 둔다. */
 function ResultSummary({ r, approveId }: { r: CheckResult; approveId?: string }) {
   const m = r.metrics;
   const flagged = flaggedCount(r);
   const ok = r.checklist.filter((x) => x.ok).length;
-  const items: Stat[] = [
+  const main: Stat[] = [
     { label: "경고 문장", value: `${flagged}개`, tone: flagged > 0 ? "danger" : "success" },
-    ...(r.checklist.length ? [{ label: "가이드라인 점검표", value: `충족 ${ok}/${r.checklist.length}`, tone: ok < r.checklist.length ? ("warning" as const) : ("success" as const) }] : []),
-    { label: "전체 문장", value: m.sentences },
-    { label: "근거가 연결된 문장", value: `${Math.round(m.linkedRatio * 100)}% (${m.linked}/${m.sentences})` },
-    ...(["no-evidence", "spec-mismatch", "numeric-conflict", "guideline-missing"] as const).map((t) => ({ label: WARNING_LABEL[t], value: m.byType[t], tone: m.byType[t] > 0 ? ("danger" as const) : undefined })),
-    { label: "점검 시간", value: formatMs(r.elapsedMs) },
-    { label: `코드 판정 ${m.byDecider.code} · 모델 판정 ${m.byDecider.model}` },
+    ...(r.checklist.length ? [{ label: "가이드라인 충족", value: `${ok}/${r.checklist.length}`, tone: ok < r.checklist.length ? ("warning" as const) : ("success" as const) }] : []),
+    { label: "근거가 연결된 문장", value: `${Math.round(m.linkedRatio * 100)}%`, detail: `${m.linked}/${m.sentences}` },
+  ];
+  const details = [
+    `전체 문장 ${m.sentences}`,
+    ...(["no-evidence", "spec-mismatch", "numeric-conflict", "guideline-missing"] as const).map((t) => `${WARNING_LABEL[t]} ${m.byType[t]}`),
+    `점검 시간 ${formatMs(r.elapsedMs)}`,
+    `코드 판정 ${m.byDecider.code} · 모델 판정 ${m.byDecider.model}`,
   ];
   return (
-    <div className="space-y-2">
-      <StatLine items={items} />
-      {approveId && (
-        <a
-          href={`#${approveId}`}
-          onClick={(e) => {
-            e.preventDefault();
-            const el = document.getElementById(approveId);
-            el?.scrollIntoView({ block: "center" });
-            el?.querySelector<HTMLElement>("button:not([disabled])")?.focus({ preventScroll: true });
-          }}
-          className="inline-flex items-center gap-1 text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-        >
-          승인하러 가기 <ChevronRight aria-hidden className="size-4" />
-        </a>
-      )}
-    </div>
+    <SummaryLine
+      main={main}
+      details={details}
+      aside={
+        approveId && (
+          <a
+            href={`#${approveId}`}
+            onClick={(e) => {
+              e.preventDefault();
+              const el = document.getElementById(approveId);
+              el?.scrollIntoView({ block: "center" });
+              el?.querySelector<HTMLElement>("button:not([disabled])")?.focus({ preventScroll: true });
+            }}
+            className="inline-flex items-center gap-1 text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+          >
+            승인하러 가기 <ChevronRight aria-hidden className="size-4" />
+          </a>
+        )
+      }
+    />
   );
 }
 
@@ -135,7 +140,7 @@ function ReviewList({ w, r }: { w: W; r: CheckResult }) {
           return (
             <li key={i} data-testid="review-item" className="rounded-xl border border-warning-border bg-warning-soft/60 p-4 text-sm">
               <p className="text-base font-medium">“{item?.text ?? x.key}”</p>
-              {item && <EvidenceChips s={item} cards={w.cards} docs={w.docs} photos={w.photos} readings={w.readings} />}
+              {item && <EvidenceChips className="mt-2 ml-0 flex" s={item} cards={w.cards} docs={w.docs} photos={w.photos} readings={w.readings} />}
               {x.sentencePart && <span className="mt-2 block">모델이 지적한 구절: “{x.sentencePart}”</span>}
               <span className="block text-warning">{x.reason}</span>
               {x.why && <span className="block text-xs text-muted-foreground">{x.why}</span>}
@@ -168,9 +173,8 @@ function WarningList({ w, r, onRewriteOne }: { w: W; r: CheckResult; onRewriteOn
         const sourced = ws.filter((x) => x.quote && x.source);
         return (
           <li key={key} data-testid="warning-item" data-sentence-key={key} className="space-y-3 rounded-xl border p-4">
-            <p className="text-base font-medium">
-              “{item?.text ?? key}”{item && <EvidenceChips s={item} cards={w.cards} docs={w.docs} photos={w.photos} readings={w.readings} />}
-            </p>
+            <p className="text-base font-medium">“{item?.text ?? key}”</p>
+            {item && <EvidenceChips className="ml-0 flex" s={item} cards={w.cards} docs={w.docs} photos={w.photos} readings={w.readings} />}
             {split && (
               <Note tone="warning" className="py-2">
                 <span className="font-semibold">
@@ -401,12 +405,18 @@ export function StepCheck({ w }: { w: W }) {
         desc="숫자·키워드·링크는 코드로 대조하고, 주장과 인용의 뜻이 맞는지와 강조 내용 반영은 생성에 쓰지 않은 다른 회사 모델이 판정합니다. 게시는 사람이 합니다."
         actions={
           tab === "draft" ? (
-            <Button data-testid="check-run" size="lg" variant={r ? "outline" : "default"} onClick={() => w.runCheck()} disabled={Boolean(blockReason) || w.jobs.check.running}>
+            <Button
+              data-testid="check-run"
+              size="lg"
+              variant={!blockReason && !w.jobs.check.running && (!r || w.checkStale) ? "default" : "outline"}
+              onClick={() => w.runCheck()}
+              disabled={Boolean(blockReason) || w.jobs.check.running}
+            >
               <ShieldCheck /> {r ? "다시 점검" : "점검하기"}
             </Button>
           ) : undefined
         }
-        blockReason={tab === "draft" && w.live ? blockReason : null}
+        blockReason={tab === "draft" ? blockReason : null}
       />
       <Tabs value={tab} onValueChange={(v) => go(v === "paste" ? "paste-check" : "step-4")} className="gap-0">
         <TabsList variant="line" className={LINE_TABS}>

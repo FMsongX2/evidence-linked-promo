@@ -1015,8 +1015,41 @@ function StepRail({ w, p }: { w: W; p: Providers | null | undefined }) {
           실행 정보
         </a>
       </nav>
-      <ProviderList p={p} className="mt-auto pt-6" />
+      <RailModels p={p} />
     </aside>
+  );
+}
+
+const MODEL_BRAND: Record<string, string> = { deepseek: "DeepSeek", claude: "Claude", gemini: "Gemini", gpt: "GPT", qwen: "Qwen", llama: "Llama", glm: "GLM" };
+
+/** 모델 식별자를 레일용 짧은 이름으로: "deepseek:deepseek-ai/deepseek-v4.1-flash-1017" → "DeepSeek V4.1 Flash", "claude-cli:claude-opus-5-5" → "Claude Opus 5.5". */
+function shortModelName(id: string): string {
+  const name = id.split(/[:/]/).pop() ?? id;
+  const parts = name.split("-").filter((t, i, a) => !(i === a.length - 1 && /^\d{4,}$/.test(t)));
+  const out: string[] = [];
+  for (const t of parts) {
+    const prev = out[out.length - 1];
+    if (/^\d+$/.test(t) && prev && /^\d+(\.\d+)*$/.test(prev)) out[out.length - 1] = `${prev}.${t}`;
+    else out.push(MODEL_BRAND[t.toLowerCase()] ?? t.charAt(0).toUpperCase() + t.slice(1));
+  }
+  return out.join(" ");
+}
+
+/** 레일의 사용 모델: 짧은 이름만 한 줄씩. 전체 식별자는 실행 정보 화면과 마우스 올림 설명에 둔다. */
+function RailModels({ p }: { p: Providers | null | undefined }) {
+  const rows: [string, string | null | undefined][] = p?.main && p.main === p.vision ? [["글·사진", p.main]] : [["글", p?.main], ["사진", p?.vision]];
+  rows.push(["판정", p?.judge]);
+  return (
+    <div className="mt-3 border-t px-2.5 pt-3 text-xs">
+      <p className="font-medium">사용 모델</p>
+      <ul className="mt-1 space-y-0.5 text-muted-foreground">
+        {rows.map(([k, id]) => (
+          <li key={k} className="truncate" title={id ?? undefined}>
+            {k}: {id ? shortModelName(id) : p ? "없음" : "확인 중"}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

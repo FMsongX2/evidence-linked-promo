@@ -102,11 +102,17 @@ export function StepContent({ w }: { w: W }) {
           </>
         }
         actions={
-          <Button data-testid="generate-run" size="lg" variant={g ? "outline" : "default"} onClick={w.generate} disabled={Boolean(blockReason) || w.jobs.generate.running}>
+          <Button
+            data-testid="generate-run"
+            size="lg"
+            variant={!blockReason && !w.jobs.generate.running && !g ? "default" : "outline"}
+            onClick={w.generate}
+            disabled={Boolean(blockReason) || w.jobs.generate.running}
+          >
             <Wand2 /> 초안 만들기
           </Button>
         }
-        blockReason={w.live ? blockReason : null}
+        blockReason={blockReason}
       />
       <Running job={w.jobs.generate} label={`콘텐츠 생성(카드 ${w.selected.length}장, 사진 ${w.readings.length}장)`} />
       {!g && !w.jobs.generate.running && <EmptyState>아직 초안이 없습니다. 1단계 카드를 체크하고 초안 만들기를 누르세요.</EmptyState>}
