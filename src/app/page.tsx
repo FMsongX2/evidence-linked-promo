@@ -1,7 +1,7 @@
 import { Workbench } from "@/components/workbench";
 
 const REPO_URL = "https://github.com/FMsongX2/evidence-linked-promo";
-const VIDEO_URL = "https://www.youtube.com/watch?v=RBbA16zRzIM";
+const VIDEO_URL = "https://www.youtube.com/watch?v=uVVEGTupDpo";
 
 export default function Page() {
   return (

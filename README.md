@@ -2,7 +2,7 @@
 
 근거 달린 홍보문은 티링크 제품 자료와 현장 사진으로 홍보 초안을 자동으로 만들고, 문장마다 원문 근거를 대조해 사양과 다른 문장을 게시 전에 걸러 내는, 티링크 홍보 담당자와 외부 리뷰 작성자를 위한 웹 앱입니다. 같은 문장 20개를 참가자와 담당자가 제품 자료와 대조하는 데는 40분 이상 걸렸고, 이 앱은 같은 20개를 18.3초에 점검했습니다. (AISH 5회 스마트워크톤, 후원사 티링크 시제)
 
-시연 영상: https://www.youtube.com/watch?v=RBbA16zRzIM
+시연 영상: https://www.youtube.com/watch?v=uVVEGTupDpo
 
 **공개 데모: https://evidence-linked-promo.vercel.app**
 
